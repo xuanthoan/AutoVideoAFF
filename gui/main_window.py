@@ -16,6 +16,7 @@ from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
 from models.project_state import ProjectState
 from models.sticker_overlay import StickerOverlay
+from utils.file_helper import output_directory
 
 
 if QMainWindow:
@@ -75,7 +76,13 @@ if QMainWindow:
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.textChanged.connect(self.set_text)
             self.export_button.clicked.connect(self.render)
-            self.open_output_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.state.export.output_dir.resolve()))))
+            self.open_output_button.clicked.connect(self.open_output_folder)
+
+        def open_output_folder(self) -> None:
+            output_path = output_directory(self.state.export.output_dir).resolve()
+            output_path.mkdir(parents=True, exist_ok=True)
+            self.append_log(f"Mở thư mục output: {output_path}")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path)))
 
         def set_videos(self, paths: list[Path]) -> None:
             self.state.videos = paths
@@ -115,7 +122,7 @@ if QMainWindow:
         def render(self) -> None:
             self.sync_state_from_controls()
             self.export_button.setEnabled(False)
-            self.append_log("Bắt đầu render batch...")
+            self.append_log(f"Bắt đầu render batch vào: {output_directory(self.state.export.output_dir).resolve()}")
             self.thread = RenderThread(self.state)
             self.thread.progress.connect(lambda _i, _t, msg: self.status.showMessage(msg))
             self.thread.log.connect(self.append_log)

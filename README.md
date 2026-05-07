@@ -37,3 +37,5 @@ Or use the included `AutoVideoAFF.spec` to bundle `assets/` and `bin/`.
 ## FFmpeg setup
 
 Rendering validates both `ffmpeg` and `ffprobe` before starting a batch. Put `ffmpeg.exe` and `ffprobe.exe` in `bin/`, or install FFmpeg globally and add it to `PATH`.
+
+Output files are written with absolute paths under the app's `output/` directory by default. During render the app writes to a hidden `.rendering.mp4` file, verifies it with `ffprobe`, and only then renames it to the final `.mp4` to avoid exposing partial/corrupt files.
