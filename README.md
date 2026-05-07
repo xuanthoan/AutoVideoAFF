@@ -46,3 +46,10 @@ Output files are written with absolute paths under the app's `output/` directory
 - The queue preview extracts a lightweight thumbnail at `-ss 0.05` and automatically updates when videos are imported or selected.
 - Render logs are concise by default (`INFO`, `WARNING`, `ERROR`, `SUCCESS`) and hide FFmpeg frame-by-frame output unless developer debug logging is enabled in code.
 - Text template previews show exactly two swatches: text color and background color.
+
+## Additional UI fixes
+
+- Preview overlays can be dragged and snap to the horizontal/vertical canvas center within 10px, showing light-blue guide lines only during snapping.
+- Scene Shuffle exposes `Scene Sensitivity` (10-80, default 30) and passes the value to PySceneDetect threshold detection.
+- Sticker Overlay includes scale (0.1x-5.0x), rotation (-360° to +360°), and motion presets: None, Fade In, Fade Out, Bounce, Pop, Slide Up, and Slide Down.
+- Built-in text templates are locked to the requested seven exact text/background color pairs.

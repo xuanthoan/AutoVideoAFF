@@ -12,19 +12,19 @@ class TextTemplate:
     border_color: str
     shadow_color: str
     preview_colors: tuple[str, str]
-    stroke_width: int = 3
+    stroke_width: int = 0
     padding: int = 24
 
 
 class TemplateManager:
     BUILT_INS = [
-        TextTemplate("Impact Pop", "white", "black@0.62", "yellow", "black@0.8", ("#ffffff", "#111111")),
-        TextTemplate("Creator White", "white", "black@0.45", "white", "black@0.6", ("#ffffff", "#333333")),
-        TextTemplate("Viral Yellow", "yellow", "black@0.68", "white", "black@0.7", ("#ffeb3b", "#111111")),
-        TextTemplate("Clean Black", "black", "white@0.82", "black", "white@0.4", ("#111111", "#ffffff")),
-        TextTemplate("Neon Pink", "white", "#ff2bd6@0.58", "#00e5ff", "black@0.8", ("#ffffff", "#ff2bd6")),
-        TextTemplate("Caption Blue", "white", "#1266f1@0.72", "white", "black@0.6", ("#ffffff", "#1266f1")),
-        TextTemplate("Minimal", "white", "black@0.0", "white", "black@0.4", ("#ffffff", "#000000"), stroke_width=1, padding=8),
+        TextTemplate("Orange White", "#FFFFFF", "#F57C4D", "#FFFFFF", "black@0.35", ("#FFFFFF", "#F57C4D")),
+        TextTemplate("White Black", "#000000", "#FFFFFF", "#000000", "black@0.20", ("#000000", "#FFFFFF")),
+        TextTemplate("Pink White", "#FFFFFF", "#FF3FA4", "#FFFFFF", "black@0.35", ("#FFFFFF", "#FF3FA4")),
+        TextTemplate("Red White", "#FFFFFF", "#FF4B4B", "#FFFFFF", "black@0.35", ("#FFFFFF", "#FF4B4B")),
+        TextTemplate("Yellow White", "#FFFFFF", "#EFCB39", "#FFFFFF", "black@0.35", ("#FFFFFF", "#EFCB39")),
+        TextTemplate("Pastel Pink", "#F0537A", "#FFD7DF", "#F0537A", "black@0.20", ("#F0537A", "#FFD7DF")),
+        TextTemplate("Green White", "#FFFFFF", "#8BC34A", "#FFFFFF", "black@0.35", ("#FFFFFF", "#8BC34A")),
     ]
 
     def names(self) -> list[str]:

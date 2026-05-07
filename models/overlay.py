@@ -9,11 +9,24 @@ from typing import Literal
 
 class MotionPreset(str, Enum):
     NONE = "None"
+    FADE_IN = "Fade In"
+    FADE_OUT = "Fade Out"
+    BOUNCE = "Bounce"
+    POP = "Pop"
+    SLIDE_UP = "Slide Up"
+    SLIDE_DOWN = "Slide Down"
+    # Backward-compatible aliases for older project states/UI values.
     FADE = "Fade"
     SLIDE = "Slide"
     ZOOM = "Zoom"
-    BOUNCE = "Bounce"
     ELASTIC = "Elastic"
+
+    @classmethod
+    def from_label(cls, label: str) -> "MotionPreset":
+        for preset in cls:
+            if preset.value == label:
+                return preset
+        return cls.NONE
 
 
 @dataclass(slots=True)

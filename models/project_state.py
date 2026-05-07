@@ -15,7 +15,7 @@ AspectRatio = Literal["9:16", "1:1", "16:9"]
 @dataclass(slots=True)
 class SceneShuffleSettings:
     enabled: bool = True
-    sensitivity: float = 27.0
+    sensitivity: float = 30.0
     random_mode: bool = True
     keep_first_segment: bool = True
     fallback_min_seconds: float = 3.0

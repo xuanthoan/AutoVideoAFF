@@ -17,6 +17,7 @@ from core.renderer.preview_renderer import PreviewRenderer
 from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
+from models.overlay import MotionPreset
 from models.project_state import ProjectState
 from models.sticker_overlay import StickerOverlay
 from utils.file_helper import output_directory
@@ -81,7 +82,9 @@ if QMainWindow:
             self.queue.currentPathChanged.connect(lambda path: self.update_preview(Path(path)))
             self.workflow.imagePoolSelected.connect(self.set_image_pool)
             self.workflow.stickerSelected.connect(self.set_sticker)
+            self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
+            self.preview.overlayMoved.connect(self.set_overlay_position)
             self.export_button.clicked.connect(self.render)
             self.open_output_button.clicked.connect(self.open_output_folder)
 
@@ -106,15 +109,39 @@ if QMainWindow:
 
         def set_sticker(self, path: str) -> None:
             self.state.overlays.sticker = StickerOverlay(path=Path(path))
+            self.set_sticker_controls(
+                float(self.workflow.sticker_scale.value()),
+                float(self.workflow.sticker_rotation.value()),
+                self.workflow.sticker_motion.currentText(),
+            )
             self.state.overlays.sticker_enabled = True
             self.workflow.sticker_overlay.setChecked(True)
+            self.preview.set_overlay_active("sticker", True)
+            self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
             self.append_log(f"[INFO] Đã chọn sticker: {Path(path).name}")
+
+        def set_sticker_controls(self, scale: float, rotation: float, motion: str) -> None:
+            self.state.overlays.sticker.scale = scale
+            self.state.overlays.sticker.rotation = rotation
+            self.state.overlays.sticker.motion = MotionPreset.from_label(motion)
+            self.preview.set_overlay_active("sticker", self.state.overlays.sticker.active)
+            self.preview.update()
+
+        def set_overlay_position(self, kind: str, x: float, y: float) -> None:
+            if kind == "text":
+                self.state.overlays.text.x = x
+                self.state.overlays.text.y = y
+            elif kind == "sticker":
+                self.state.overlays.sticker.x = x
+                self.state.overlays.sticker.y = y
 
         def set_text(self, text: str) -> None:
             self.state.overlays.text.text = text
             active = bool(text.strip())
             self.state.overlays.text_enabled = active
             self.workflow.text_overlay.setChecked(active)
+            self.preview.set_overlay_active("text", active)
+            self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
 
         def update_preview(self, video_path: Path) -> None:
@@ -132,11 +159,17 @@ if QMainWindow:
 
         def sync_state_from_controls(self) -> None:
             self.state.scene_shuffle.enabled = self.workflow.scene_shuffle.isChecked()
+            self.state.scene_shuffle.sensitivity = float(self.workflow.scene_sensitivity.value())
             self.state.image_composite.enabled = self.workflow.image_composite.isChecked() and bool(self.state.image_composite.image_pool)
             self.state.overlays.text_enabled = self.workflow.text_overlay.isChecked() and bool(self.state.overlays.text.text.strip())
             self.state.overlays.sticker_enabled = self.workflow.sticker_overlay.isChecked() and self.state.overlays.sticker.path is not None
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
+            self.set_sticker_controls(
+                float(self.workflow.sticker_scale.value()),
+                float(self.workflow.sticker_rotation.value()),
+                self.workflow.sticker_motion.currentText(),
+            )
 
         def append_log(self, message: str) -> None:
             self.log_box.append(message)

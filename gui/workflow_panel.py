@@ -9,6 +9,7 @@ try:
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
+        QDoubleSpinBox,
         QFileDialog,
         QFormLayout,
         QGroupBox,
@@ -20,7 +21,7 @@ try:
     )
 except ImportError:
     Qt = Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
-    QCheckBox = QComboBox = QFileDialog = QFormLayout = QGroupBox = QPushButton = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
+    QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGroupBox = QPushButton = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.overlays.template_manager import TemplateManager, TextTemplate
 
@@ -30,6 +31,7 @@ if QWidget:
         changed = Signal()
         imagePoolSelected = Signal(list)
         stickerSelected = Signal(str)
+        stickerControlsChanged = Signal(float, float, str)
         textChanged = Signal(str)
 
         def __init__(self) -> None:
@@ -37,6 +39,7 @@ if QWidget:
             self.template_manager = TemplateManager()
             self.scene_shuffle = QCheckBox("Scene Shuffle")
             self.scene_shuffle.setChecked(True)
+            self.scene_sensitivity = QSpinBox(); self.scene_sensitivity.setRange(10, 80); self.scene_sensitivity.setValue(30)
             self.image_composite = QCheckBox("Image Composite")
             self.text_overlay = QCheckBox("Text Overlay")
             self.sticker_overlay = QCheckBox("Sticker Overlay")
@@ -46,11 +49,17 @@ if QWidget:
             self._populate_template_combo()
             self.font_size = QSpinBox(); self.font_size.setRange(16, 260); self.font_size.setValue(96)
             self.motion = QComboBox(); self.motion.addItems(["None", "Fade", "Slide", "Zoom", "Bounce", "Elastic"])
+            self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.1, 5.0); self.sticker_scale.setSingleStep(0.1); self.sticker_scale.setValue(1.0); self.sticker_scale.setSuffix("x")
+            self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
+            self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Bounce", "Pop", "Slide Up", "Slide Down"])
             image_button = QPushButton("Chọn image pool")
             sticker_button = QPushButton("Chọn sticker")
             image_button.clicked.connect(self.pick_images)
             sticker_button.clicked.connect(self.pick_sticker)
             self.text.textChanged.connect(lambda: self.textChanged.emit(self.text.toPlainText()))
+            self.sticker_scale.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
             layout = QVBoxLayout(self)
             for group in (self._scene_group(), self._image_group(image_button), self._text_group(), self._sticker_group(sticker_button)):
                 layout.addWidget(group)
@@ -82,7 +91,7 @@ if QWidget:
 
         def _scene_group(self):
             group = QGroupBox("PANEL 1 — SCENE SHUFFLE")
-            form = QFormLayout(group); form.addRow(self.scene_shuffle)
+            form = QFormLayout(group); form.addRow(self.scene_shuffle); form.addRow("Scene Sensitivity", self.scene_sensitivity)
             return group
 
         def _image_group(self, button):
@@ -98,8 +107,19 @@ if QWidget:
 
         def _sticker_group(self, button):
             group = QGroupBox("PANEL 4 — STICKER OVERLAY")
-            form = QFormLayout(group); form.addRow(self.sticker_overlay); form.addRow(button)
+            form = QFormLayout(group)
+            form.addRow(self.sticker_overlay); form.addRow(button)
+            form.addRow("Scale", self.sticker_scale)
+            form.addRow("Rotation", self.sticker_rotation)
+            form.addRow("Motion", self.sticker_motion)
             return group
+
+        def emit_sticker_controls(self) -> None:
+            self.stickerControlsChanged.emit(
+                float(self.sticker_scale.value()),
+                float(self.sticker_rotation.value()),
+                self.sticker_motion.currentText(),
+            )
 
         def pick_images(self) -> None:
             files, _ = QFileDialog.getOpenFileNames(self, "Image pool", "", "Images (*.png *.jpg *.jpeg *.webp)")
