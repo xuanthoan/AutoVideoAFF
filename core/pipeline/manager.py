@@ -21,8 +21,14 @@ class PipelineManager:
     def active_modules(self, state: ProjectState):
         return [module for module in self.available_modules if module.enabled(state)]
 
-    def build_command(self, input_path: Path, output_path: Path, state: ProjectState) -> list[str]:
-        job = RenderJob(input_path=input_path, output_path=output_path, state=state)
+    def build_command(
+        self,
+        input_path: Path,
+        output_path: Path,
+        state: ProjectState,
+        original_audio_path: Path | None = None,
+    ) -> list[str]:
+        job = RenderJob(input_path=input_path, output_path=output_path, state=state, original_audio_path=original_audio_path)
         graph = FilterGraph()
         for module in self.active_modules(state):
             graph = module.apply(job, graph)

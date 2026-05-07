@@ -29,6 +29,7 @@ class RenderJob:
     input_path: Path
     output_path: Path
     state: ProjectState
+    original_audio_path: Path | None = None
 
 
 class PipelineModule(Protocol):

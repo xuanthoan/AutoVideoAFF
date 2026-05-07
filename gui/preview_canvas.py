@@ -1,12 +1,14 @@
 """Realtime preview canvas with safe-area and snap guides."""
 from __future__ import annotations
 
+from pathlib import Path
+
 try:
     from PySide6.QtCore import Qt, Signal
-    from PySide6.QtGui import QPainter, QPen
+    from PySide6.QtGui import QPainter, QPen, QPixmap
     from PySide6.QtWidgets import QLabel
 except ImportError:  # lets non-GUI CI import architecture modules without PySide6 installed
-    Qt = Signal = QPainter = QPen = QLabel = None
+    Qt = Signal = QPainter = QPen = QPixmap = QLabel = None
 
 
 if QLabel:
@@ -20,6 +22,28 @@ if QLabel:
             self.setStyleSheet("background:#111;color:#aaa;border:1px solid #333;")
             self._snap_x: int | None = None
             self._snap_y: int | None = None
+            self._source_pixmap: QPixmap | None = None
+
+        def set_preview_image(self, image_path: Path) -> None:
+            pixmap = QPixmap(str(image_path))
+            if pixmap.isNull():
+                self.setText("Preview unavailable")
+                self._source_pixmap = None
+            else:
+                self.setText("")
+                self._source_pixmap = pixmap
+                self._apply_scaled_pixmap()
+            self.update()
+
+        def resizeEvent(self, event):
+            super().resizeEvent(event)
+            self._apply_scaled_pixmap()
+
+        def _apply_scaled_pixmap(self) -> None:
+            if self._source_pixmap is None or self._source_pixmap.isNull():
+                return
+            scaled = self._source_pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.setPixmap(scaled)
 
         def paintEvent(self, event):
             super().paintEvent(event)

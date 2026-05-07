@@ -1,8 +1,7 @@
 """Scene shuffle pipeline module.
 
-This module plans segment order without creating an encoded intermediate. Segment
-trims are represented as filter_complex trim/concat nodes so the final renderer
-still performs one encode at export time.
+Only video frames are shuffled. Audio is deliberately kept outside the shuffle
+concat and reattached from the original timeline by the final FFmpeg command.
 """
 from __future__ import annotations
 
@@ -35,22 +34,15 @@ class SceneShufflePipeline:
             segments = [head, *tail] if settings.keep_first_segment else tail + [head]
 
         v_labels: list[str] = []
-        a_labels: list[str] = []
         for idx, segment in enumerate(segments):
             v = f"shv{idx}"
-            a = f"sha{idx}"
             graph.chains.append(
                 f"[{graph.video_label}]trim=start={segment.start:.3f}:end={segment.end:.3f},setpts=PTS-STARTPTS[{v}]"
             )
-            graph.chains.append(
-                f"[0:a]atrim=start={segment.start:.3f}:end={segment.end:.3f},asetpts=PTS-STARTPTS[{a}]"
-            )
             v_labels.append(f"[{v}]")
-            a_labels.append(f"[{a}]")
         out_v = "shuffled_v"
-        out_a = "shuffled_a"
-        graph.chains.append("".join(sum(zip(v_labels, a_labels), ())) + f"concat=n={len(segments)}:v=1:a=1[{out_v}][{out_a}]")
+        graph.chains.append("".join(v_labels) + f"concat=n={len(segments)}:v=1:a=0[{out_v}]")
         graph.video_label = out_v
-        graph.audio_label = out_a
-        graph.extra_args.extend(["-vsync", "2", "-fflags", "+genpts"])
+        graph.audio_label = "original_audio" if job.original_audio_path else "0:a?"
+        graph.extra_args.extend(["-vsync", "2", "-fflags", "+genpts", "-shortest"])
         return graph

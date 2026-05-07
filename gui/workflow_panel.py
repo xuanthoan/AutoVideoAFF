@@ -64,19 +64,19 @@ if QWidget:
         def _template_icon_size(self):
             from PySide6.QtCore import QSize
 
-            return QSize(72, 22)
+            return QSize(48, 20)
 
         def _template_icon(self, template: TextTemplate):
-            pixmap = QPixmap(72, 22)
+            pixmap = QPixmap(48, 20)
             pixmap.fill(QColor("transparent"))
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
             colors = [QColor(color) for color in template.preview_colors]
-            width = 72 // len(colors)
+            width = 24
             for index, color in enumerate(colors):
-                painter.fillRect(index * width, 0, width, 22, color)
+                painter.fillRect(index * width, 0, width, 20, color)
             painter.setPen(QPen(QColor("#222222"), 1))
-            painter.drawRoundedRect(0, 0, 71, 21, 4, 4)
+            painter.drawRoundedRect(0, 0, 47, 19, 4, 4)
             painter.end()
             return QIcon(pixmap)
 

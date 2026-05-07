@@ -1,6 +1,8 @@
 """Main desktop window for the unified app."""
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from pathlib import Path
 
 try:
@@ -11,6 +13,7 @@ except ImportError:
     QThread = QUrl = Signal = QDesktopServices = QHBoxLayout = QMainWindow = QPushButton = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.renderer.batch_renderer import BatchRenderer
+from core.renderer.preview_renderer import PreviewRenderer
 from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
@@ -53,6 +56,9 @@ if QMainWindow:
             self.workflow = WorkflowPanel()
             self.export_button = QPushButton(self.state.render_count_label())
             self.open_output_button = QPushButton("Mở thư mục output")
+            self.preview_renderer = PreviewRenderer()
+            self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
+            self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
             self.log_box = QTextEdit()
             self.log_box.setReadOnly(True)
             self.log_box.setMinimumHeight(160)
@@ -72,6 +78,7 @@ if QMainWindow:
 
         def _wire(self) -> None:
             self.queue.changed.connect(self.set_videos)
+            self.queue.currentPathChanged.connect(lambda path: self.update_preview(Path(path)))
             self.workflow.imagePoolSelected.connect(self.set_image_pool)
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.textChanged.connect(self.set_text)
@@ -81,32 +88,47 @@ if QMainWindow:
         def open_output_folder(self) -> None:
             output_path = output_directory(self.state.export.output_dir).resolve()
             output_path.mkdir(parents=True, exist_ok=True)
-            self.append_log(f"Mở thư mục output: {output_path}")
+            self.append_log(f"[INFO] Mở thư mục output: {output_path}")
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path)))
 
         def set_videos(self, paths: list[Path]) -> None:
             self.state.videos = paths
             self.export_button.setText(self.state.render_count_label())
-            self.append_log(f"Đã cập nhật queue: {len(paths)} video")
+            self.append_log(f"[INFO] Loading videos: {len(paths)} video")
+            if paths:
+                self.update_preview(paths[0])
 
         def set_image_pool(self, paths: list[Path]) -> None:
             self.state.image_composite.image_pool = paths
             self.state.image_composite.enabled = bool(paths)
             self.workflow.image_composite.setChecked(bool(paths))
-            self.append_log(f"Đã chọn image pool: {len(paths)} ảnh")
+            self.append_log(f"[INFO] Đã chọn image pool: {len(paths)} ảnh")
 
         def set_sticker(self, path: str) -> None:
             self.state.overlays.sticker = StickerOverlay(path=Path(path))
             self.state.overlays.sticker_enabled = True
             self.workflow.sticker_overlay.setChecked(True)
-            self.append_log(f"Đã chọn sticker: {Path(path).name}")
+            self.append_log(f"[INFO] Đã chọn sticker: {Path(path).name}")
 
         def set_text(self, text: str) -> None:
             self.state.overlays.text.text = text
             active = bool(text.strip())
             self.state.overlays.text_enabled = active
             self.workflow.text_overlay.setChecked(active)
-            self.append_log("Text overlay: bật" if active else "Text overlay: tắt")
+            # Keep typing workflow quiet; render logs will show overlay processing when enabled.
+
+        def update_preview(self, video_path: Path) -> None:
+            if not video_path.exists():
+                self.append_log(f"[WARNING] Không tìm thấy video preview: {video_path}")
+                return
+            cache_name = hashlib.sha1(str(video_path).encode("utf-8")).hexdigest() + ".jpg"
+            preview_path = self.preview_cache_dir / cache_name
+            try:
+                if not preview_path.exists():
+                    self.preview_renderer.extract_first_valid_frame(video_path, preview_path)
+                self.preview.set_preview_image(preview_path)
+            except Exception as exc:
+                self.append_log(f"[WARNING] Không tạo được preview: {exc}")
 
         def sync_state_from_controls(self) -> None:
             self.state.scene_shuffle.enabled = self.workflow.scene_shuffle.isChecked()
@@ -122,7 +144,7 @@ if QMainWindow:
         def render(self) -> None:
             self.sync_state_from_controls()
             self.export_button.setEnabled(False)
-            self.append_log(f"Bắt đầu render batch vào: {output_directory(self.state.export.output_dir).resolve()}")
+            self.append_log(f"[INFO] Bắt đầu render batch vào: {output_directory(self.state.export.output_dir).resolve()}")
             self.thread = RenderThread(self.state)
             self.thread.progress.connect(lambda _i, _t, msg: self.status.showMessage(msg))
             self.thread.log.connect(self.append_log)
@@ -133,12 +155,12 @@ if QMainWindow:
         def render_finished(self, paths: list[str]) -> None:
             self.export_button.setEnabled(True)
             self.status.showMessage(f"Hoàn tất {len(paths)} video")
-            self.append_log(f"Hoàn tất {len(paths)} video.")
+            self.append_log(f"[SUCCESS] Hoàn tất {len(paths)} video.")
 
         def render_failed(self, message: str) -> None:
             self.export_button.setEnabled(True)
             self.status.showMessage("Render lỗi")
-            self.append_log("LỖI: " + message)
+            self.append_log("[ERROR] " + message)
 else:
     class MainWindow:  # type: ignore[no-redef]
         pass
