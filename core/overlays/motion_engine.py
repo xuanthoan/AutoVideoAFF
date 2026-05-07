@@ -21,6 +21,8 @@ class MotionEngine:
             return base_x, f"{base_y}-h*(1-min(t/0.35\\,1))", enable
         if motion == MotionPreset.BOUNCE:
             return base_x, f"{base_y}+18*sin(18*t)*exp(-2*t)", enable
+        if motion == MotionPreset.DRIFT:
+            return f"{base_x}+18*sin(t*0.8)", f"{base_y}+10*cos(t*0.6)", enable
         if motion == MotionPreset.ELASTIC:
             return base_x, f"{base_y}+28*sin(22*t)*exp(-3*t)", enable
         return base_x, base_y, enable
@@ -35,7 +37,7 @@ class MotionEngine:
     def sticker_scale_expr(self, scale: float, motion: MotionPreset) -> tuple[str, str]:
         base_w = f"iw*{scale:.4f}"
         base_h = f"ih*{scale:.4f}"
-        if motion in {MotionPreset.POP, MotionPreset.ZOOM}:
+        if motion in {MotionPreset.POP, MotionPreset.ZOOM, MotionPreset.SCALE}:
             pop = "(0.65+0.35*min(t/0.25\\,1)+0.08*sin(24*t)*exp(-6*t))"
             return f"{base_w}*{pop}", f"{base_h}*{pop}"
         return base_w, base_h

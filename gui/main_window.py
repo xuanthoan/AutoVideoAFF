@@ -18,7 +18,7 @@ from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
 from models.overlay import MotionPreset
-from models.project_state import ProjectState
+from models.project_state import ProjectState, WorkflowMode
 from models.sticker_overlay import StickerOverlay
 from utils.file_helper import output_directory
 
@@ -33,10 +33,14 @@ if QMainWindow:
         def __init__(self, state: ProjectState) -> None:
             super().__init__()
             self.state = state
+            self.renderer = BatchRenderer()
+
+        def stop(self) -> None:
+            self.renderer.stop()
 
         def run(self) -> None:
             try:
-                outputs = BatchRenderer().render(
+                outputs = self.renderer.render(
                     self.state,
                     lambda i, t, m: self.progress.emit(i, t, m),
                     lambda message: self.log.emit(message),
@@ -56,7 +60,9 @@ if QMainWindow:
             self.preview = PreviewCanvas()
             self.workflow = WorkflowPanel()
             self.export_button = QPushButton(self.state.render_count_label())
-            self.open_output_button = QPushButton("Mở thư mục output")
+            self.stop_button = QPushButton("Stop")
+            self.stop_button.setEnabled(False)
+            self.open_output_button = QPushButton("Open Output Folder")
             self.preview_renderer = PreviewRenderer()
             self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
             self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +78,7 @@ if QMainWindow:
             right = QVBoxLayout()
             right.addWidget(self.workflow)
             right.addWidget(self.export_button)
+            right.addWidget(self.stop_button)
             right.addWidget(self.open_output_button)
             right.addWidget(self.log_box)
             layout.addLayout(right, 1)
@@ -86,6 +93,7 @@ if QMainWindow:
             self.workflow.textChanged.connect(self.set_text)
             self.preview.overlayMoved.connect(self.set_overlay_position)
             self.export_button.clicked.connect(self.render)
+            self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
 
         def open_output_folder(self) -> None:
@@ -104,7 +112,7 @@ if QMainWindow:
         def set_image_pool(self, paths: list[Path]) -> None:
             self.state.image_composite.image_pool = paths
             self.state.image_composite.enabled = bool(paths)
-            self.workflow.image_composite.setChecked(bool(paths))
+            self.workflow.set_image_pool(paths)
             self.append_log(f"[INFO] Đã chọn image pool: {len(paths)} ảnh")
 
         def set_sticker(self, path: str) -> None:
@@ -115,7 +123,6 @@ if QMainWindow:
                 self.workflow.sticker_motion.currentText(),
             )
             self.state.overlays.sticker_enabled = True
-            self.workflow.sticker_overlay.setChecked(True)
             self.preview.set_overlay_active("sticker", True)
             self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
             self.append_log(f"[INFO] Đã chọn sticker: {Path(path).name}")
@@ -139,7 +146,6 @@ if QMainWindow:
             self.state.overlays.text.text = text
             active = bool(text.strip())
             self.state.overlays.text_enabled = active
-            self.workflow.text_overlay.setChecked(active)
             self.preview.set_overlay_active("text", active)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
@@ -158,13 +164,25 @@ if QMainWindow:
                 self.append_log(f"[WARNING] Không tạo được preview: {exc}")
 
         def sync_state_from_controls(self) -> None:
-            self.state.scene_shuffle.enabled = self.workflow.scene_shuffle.isChecked()
+            mode = self.workflow.selected_workflow_mode()
+            self.state.workflow_mode = mode
+            self.state.scene_shuffle.enabled = mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3}
             self.state.scene_shuffle.sensitivity = float(self.workflow.scene_sensitivity.value())
-            self.state.image_composite.enabled = self.workflow.image_composite.isChecked() and bool(self.state.image_composite.image_pool)
-            self.state.overlays.text_enabled = self.workflow.text_overlay.isChecked() and bool(self.state.overlays.text.text.strip())
-            self.state.overlays.sticker_enabled = self.workflow.sticker_overlay.isChecked() and self.state.overlays.sticker.path is not None
+            self.state.scene_shuffle.random_mode = self.workflow.shuffle_random.isChecked()
+            self.state.scene_shuffle.keep_first_segment = self.workflow.keep_first_segment.isChecked()
+            self.state.scene_shuffle.fallback_min_seconds = float(self.workflow.fallback_min.value())
+            self.state.scene_shuffle.fallback_max_seconds = max(float(self.workflow.fallback_max.value()), float(self.workflow.fallback_min.value()))
+            self.state.image_composite.enabled = mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2} and bool(self.state.image_composite.image_pool)
+            self.state.image_composite.image_height_percent = float(self.workflow.image_height.value())
+            self.state.image_composite.overlap_percent = min(float(self.workflow.overlap.value()), self.state.image_composite.image_height_percent)
+            self.state.image_composite.crop_focus = self.workflow.crop_focus.currentText()
+            self.state.image_composite.fade_curve = self.workflow.fade_curve.currentText()
+            overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
+            self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
+            self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
+            self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),
@@ -177,21 +195,38 @@ if QMainWindow:
         def render(self) -> None:
             self.sync_state_from_controls()
             self.export_button.setEnabled(False)
+            self.stop_button.setEnabled(True)
+            self.export_button.setText("Rendering...")
             self.append_log(f"[INFO] Bắt đầu render batch vào: {output_directory(self.state.export.output_dir).resolve()}")
             self.thread = RenderThread(self.state)
-            self.thread.progress.connect(lambda _i, _t, msg: self.status.showMessage(msg))
+            self.thread.progress.connect(self.render_progress)
             self.thread.log.connect(self.append_log)
             self.thread.failed.connect(self.render_failed)
             self.thread.finishedPaths.connect(self.render_finished)
             self.thread.start()
 
+        def render_progress(self, index: int, total: int, message: str) -> None:
+            self.status.showMessage(message)
+            self.export_button.setText(f"Rendering... {index}/{total}")
+
+        def stop_render(self) -> None:
+            if hasattr(self, "thread"):
+                self.thread.stop()
+                self.append_log("[WARNING] Stop requested — terminating FFmpeg tasks...")
+
         def render_finished(self, paths: list[str]) -> None:
             self.export_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
+            self.export_button.setText("Render Complete")
             self.status.showMessage(f"Hoàn tất {len(paths)} video")
             self.append_log(f"[SUCCESS] Hoàn tất {len(paths)} video.")
+            if self.state.export.auto_open_output:
+                self.open_output_folder()
 
         def render_failed(self, message: str) -> None:
             self.export_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
+            self.export_button.setText(self.state.render_count_label())
             self.status.showMessage("Render lỗi")
             self.append_log("[ERROR] " + message)
 else:

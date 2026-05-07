@@ -9,17 +9,31 @@ from core.pipeline.export_pipeline import FinalExportPipeline
 from core.pipeline.overlay_pipeline import OverlayPipeline
 from core.pipeline.shuffle_pipeline import SceneShufflePipeline
 from core.renderer.ffmpeg_builder import FFmpegBuilder
-from models.project_state import ProjectState
+from models.project_state import ProjectState, WorkflowMode
 
 
 class PipelineManager:
-    """Builds only enabled modules and merges them into one final FFmpeg command."""
+    """Builds one enabled workflow mode and merges modules into one FFmpeg command."""
 
     def __init__(self) -> None:
-        self.available_modules = [SceneShufflePipeline(), ImageCompositePipeline(), OverlayPipeline(), FinalExportPipeline()]
+        self.shuffle = SceneShufflePipeline()
+        self.image = ImageCompositePipeline()
+        self.overlay = OverlayPipeline()
+        self.export = FinalExportPipeline()
 
     def active_modules(self, state: ProjectState):
-        return [module for module in self.available_modules if module.enabled(state)]
+        modules = []
+        if state.workflow_mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3}:
+            if self.shuffle.enabled(state):
+                modules.append(self.shuffle)
+        if state.workflow_mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2}:
+            if self.image.enabled(state):
+                modules.append(self.image)
+        if state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}:
+            if self.overlay.enabled(state):
+                modules.append(self.overlay)
+        modules.append(self.export)
+        return modules
 
     def build_command(
         self,

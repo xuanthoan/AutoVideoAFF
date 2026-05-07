@@ -15,6 +15,8 @@ class MotionPreset(str, Enum):
     POP = "Pop"
     SLIDE_UP = "Slide Up"
     SLIDE_DOWN = "Slide Down"
+    SCALE = "Scale"
+    DRIFT = "Drift"
     # Backward-compatible aliases for older project states/UI values.
     FADE = "Fade"
     SLIDE = "Slide"

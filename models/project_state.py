@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +11,14 @@ from .sticker_overlay import StickerOverlay
 from .text_overlay import TextOverlay
 
 AspectRatio = Literal["9:16", "1:1", "16:9"]
+FadeCurve = Literal["linear", "smooth", "strong"]
+
+
+class WorkflowMode(str, Enum):
+    PIPELINE_1 = "Pipeline 1 — Shuffle + Image"
+    PIPELINE_2 = "Pipeline 2 — Shuffle + Image + Overlay"
+    PIPELINE_3 = "Pipeline 3 — Shuffle + Overlay"
+    PIPELINE_4 = "Pipeline 4 — Overlay Only"
 
 
 @dataclass(slots=True)
@@ -29,6 +38,7 @@ class ImageCompositeSettings:
     image_height_percent: float = 35.0
     overlap_percent: float = 5.0
     crop_focus: CropFocus = "center"
+    fade_curve: FadeCurve = "linear"
     auto_random_image: bool = True
 
 
@@ -50,15 +60,17 @@ class ExportSettings:
     aspect_ratio: AspectRatio = "9:16"
     crf: int = 18
     preset: str = "veryfast"
+    auto_open_output: bool = False
 
 
 @dataclass(slots=True)
 class ProjectState:
     videos: list[Path] = field(default_factory=list)
+    workflow_mode: WorkflowMode = WorkflowMode.PIPELINE_1
     scene_shuffle: SceneShuffleSettings = field(default_factory=SceneShuffleSettings)
     image_composite: ImageCompositeSettings = field(default_factory=ImageCompositeSettings)
     overlays: OverlaySettings = field(default_factory=OverlaySettings)
     export: ExportSettings = field(default_factory=ExportSettings)
 
     def render_count_label(self) -> str:
-        return f"Xuất Video ({len(self.videos)})" if self.videos else "Xuất Video"
+        return f"Render Video ({len(self.videos)})" if self.videos else "Render Video"

@@ -53,3 +53,10 @@ Output files are written with absolute paths under the app's `output/` directory
 - Scene Shuffle exposes `Scene Sensitivity` (10-80, default 30) and passes the value to PySceneDetect threshold detection.
 - Sticker Overlay includes scale (0.1x-5.0x), rotation (-360° to +360°), and motion presets: None, Fade In, Fade Out, Bounce, Pop, Slide Up, and Slide Down.
 - Built-in text templates are locked to the requested seven exact text/background color pairs.
+
+## Unified Social Video Factory workflow
+
+- The app now exposes exactly four mutually exclusive workflow modes: Shuffle + Image, Shuffle + Image + Overlay, Shuffle + Overlay, and Overlay Only.
+- The right workflow column includes dedicated controls for pipeline selection, shuffle sensitivity/fallback behavior, image multi-select compositing settings, text templates/motion, sticker properties/motion, and export actions.
+- Batch rendering processes each video independently: failed videos are logged and skipped, FFmpeg commands are retried once, and the Stop action terminates active FFmpeg subprocesses safely.
+- Render logs include timestamps, workflow status, FFmpeg commands, and stderr tails on failure without continuous frame-by-frame spam during successful renders.
