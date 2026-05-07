@@ -33,3 +33,7 @@ pyinstaller --noconfirm --onedir --windowed main.py
 ```
 
 Or use the included `AutoVideoAFF.spec` to bundle `assets/` and `bin/`.
+
+## FFmpeg setup
+
+Rendering validates both `ffmpeg` and `ffprobe` before starting a batch. Put `ffmpeg.exe` and `ffprobe.exe` in `bin/`, or install FFmpeg globally and add it to `PATH`.
