@@ -44,5 +44,5 @@ class SceneShufflePipeline:
         graph.chains.append("".join(v_labels) + f"concat=n={len(segments)}:v=1:a=0[{out_v}]")
         graph.video_label = out_v
         graph.audio_label = "original_audio" if job.original_audio_path else "0:a?"
-        graph.extra_args.extend(["-vsync", "2", "-fflags", "+genpts", "-shortest"])
+        graph.extra_args.extend(["-fps_mode", "passthrough", "-fflags", "+genpts", "-shortest"])
         return graph

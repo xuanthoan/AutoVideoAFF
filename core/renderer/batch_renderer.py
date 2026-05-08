@@ -79,6 +79,7 @@ class BatchRenderer:
                 self._log(log, "INFO", "Exporting final video...")
                 render_state = self._state_for_video(state)
                 cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
+                self._write_debug_filtergraph(cmd, output, log)
                 self._log(log, "INFO", "FFmpeg command: " + self._format_command(cmd))
                 self._run_command(cmd, log)
                 self._verify_output(temp_output, log)
@@ -96,6 +97,7 @@ class BatchRenderer:
                 continue
             finally:
                 temp_audio.unlink(missing_ok=True)
+                self._cleanup_temp_files(self.manager.last_temp_files, log)
         if self.process_manager.stop_requested:
             self._log(log, "WARNING", "Queue stopped safely.")
         else:
@@ -136,6 +138,22 @@ class BatchRenderer:
             self._log(log, "WARNING", "Video không có audio, xuất video không kèm audio.")
             return None
         raise RuntimeError(f"Không tách được audio gốc. {detail}")
+
+    def _write_debug_filtergraph(self, cmd: list[str], output: Path, log: LogCallback | None) -> None:
+        if "-filter_complex" not in cmd:
+            return
+        filtergraph = cmd[cmd.index("-filter_complex") + 1]
+        debug_path = output.parent / "debug_filtergraph.txt"
+        debug_path.write_text(filtergraph, encoding="utf-8")
+        self._log(log, "INFO", f"Saved FFmpeg filtergraph debug file: {debug_path}")
+
+    def _cleanup_temp_files(self, paths: list[Path], log: LogCallback | None) -> None:
+        for path in paths:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                self._log(log, "WARNING", f"Không xoá được file text overlay tạm: {path}. {exc}")
+        paths.clear()
 
     def _run_command(self, cmd: list[str], log: LogCallback | None, retries: int = 1) -> None:
         last_result: subprocess.CompletedProcess[str] | None = None

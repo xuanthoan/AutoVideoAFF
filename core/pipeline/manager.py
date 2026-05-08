@@ -10,6 +10,7 @@ from core.pipeline.overlay_pipeline import OverlayPipeline
 from core.pipeline.shuffle_pipeline import SceneShufflePipeline
 from core.renderer.ffmpeg_builder import FFmpegBuilder
 from models.project_state import ProjectState, WorkflowMode
+from utils.ffmpeg_helper import probe_video_size
 
 
 class PipelineManager:
@@ -20,6 +21,7 @@ class PipelineManager:
         self.image = ImageCompositePipeline()
         self.overlay = OverlayPipeline()
         self.export = FinalExportPipeline()
+        self.last_temp_files: list[Path] = []
 
     def active_modules(self, state: ProjectState):
         modules = []
@@ -42,8 +44,17 @@ class PipelineManager:
         state: ProjectState,
         original_audio_path: Path | None = None,
     ) -> list[str]:
-        job = RenderJob(input_path=input_path, output_path=output_path, state=state, original_audio_path=original_audio_path)
+        video_width, video_height = probe_video_size(input_path)
+        job = RenderJob(
+            input_path=input_path,
+            output_path=output_path,
+            state=state,
+            original_audio_path=original_audio_path,
+            video_width=video_width,
+            video_height=video_height,
+        )
         graph = FilterGraph()
         for module in self.active_modules(state):
             graph = module.apply(job, graph)
+        self.last_temp_files = list(graph.temp_files)
         return FFmpegBuilder().build(job, graph)

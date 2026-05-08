@@ -80,3 +80,27 @@ def probe_duration(path: Path) -> float:
     ]
     result = subprocess.run(cmd, check=True, capture_output=True, text=True, startupinfo=subprocess_startupinfo())
     return float(json.loads(result.stdout)["format"]["duration"])
+
+
+def probe_video_size(path: Path) -> tuple[int, int]:
+    cmd = [
+        executable("ffprobe"),
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        str(path),
+    ]
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True, startupinfo=subprocess_startupinfo())
+    streams = json.loads(result.stdout).get("streams", [])
+    if not streams:
+        raise ValueError(f"No video stream found in {path}")
+    width = int(streams[0]["width"])
+    height = int(streams[0]["height"])
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Invalid video size for {path}: {width}x{height}")
+    return width, height

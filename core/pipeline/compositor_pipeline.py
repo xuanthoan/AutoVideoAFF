@@ -19,6 +19,8 @@ class ImageCompositePipeline:
             video_label=graph.video_label,
             image_label=f"{image_input_index}:v",
             settings=job.state.image_composite,
+            video_width=job.video_width,
+            video_height=job.video_height,
         )
         graph.add_chain(chain, output)
         return graph

@@ -15,6 +15,7 @@ class FilterGraph:
     video_label: str = "0:v"
     audio_label: str | None = "0:a?"
     extra_args: list[str] = field(default_factory=list)
+    temp_files: list[Path] = field(default_factory=list)
 
     def add_chain(self, chain: str, output_label: str) -> None:
         self.chains.append(chain)
@@ -30,6 +31,12 @@ class RenderJob:
     output_path: Path
     state: ProjectState
     original_audio_path: Path | None = None
+    video_width: int = 1080
+    video_height: int = 1920
+
+    @property
+    def canvas_size(self) -> str:
+        return f"{self.video_width}x{self.video_height}"
 
 
 class PipelineModule(Protocol):
