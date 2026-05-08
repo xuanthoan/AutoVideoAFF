@@ -11,7 +11,7 @@ from core.pipeline.manager import PipelineManager
 from core.overlays.template_manager import TemplateManager
 from models.project_state import ProjectState, WorkflowMode
 from utils.ffmpeg_helper import FFmpegNotFoundError, executable, validate_ffmpeg_pair
-from utils.file_helper import safe_output_path, temporary_output_path
+from utils.file_helper import output_directory_for_videos, safe_output_path, temporary_output_path
 from utils.process_manager import ProcessManager, RenderStopped
 
 ProgressCallback = Callable[[int, int, str], None]
@@ -48,12 +48,14 @@ class BatchRenderer:
             self._log(log, "ERROR", str(exc))
             raise
 
+        batch_output_dir = output_directory_for_videos(state.videos, state.export.output_dir)
         self._log(log, "INFO", f"Workflow: {state.workflow_mode.value}")
         self._log(log, "INFO", "FFmpeg đã sẵn sàng.")
+        self._log(log, "INFO", f"Output folder: {batch_output_dir}")
         for index, video in enumerate(state.videos, start=1):
             if self.process_manager.stop_requested:
                 break
-            output = safe_output_path(state.export.output_dir, video)
+            output = safe_output_path(batch_output_dir, video)
             temp_output = temporary_output_path(output)
             temp_audio = temporary_output_path(output.with_suffix(".m4a"))
             temp_output.unlink(missing_ok=True)

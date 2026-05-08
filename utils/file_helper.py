@@ -14,8 +14,15 @@ def output_directory(output_dir: Path) -> Path:
     return output_dir if output_dir.is_absolute() else app_root() / output_dir
 
 
+def output_directory_for_videos(videos: list[Path], fallback: Path = Path("output")) -> Path:
+    """Use the first imported video's folder as the batch output root."""
+    if videos:
+        return videos[0].resolve().parent / "output"
+    return output_directory(fallback)
+
+
 def safe_output_path(output_dir: Path, source: Path) -> Path:
-    resolved_dir = output_directory(output_dir).resolve()
+    resolved_dir = output_dir.resolve() if output_dir.is_absolute() else output_directory(output_dir).resolve()
     resolved_dir.mkdir(parents=True, exist_ok=True)
     candidate = resolved_dir / f"{source.stem}.mp4"
     index = 1

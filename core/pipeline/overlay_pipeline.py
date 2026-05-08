@@ -42,6 +42,7 @@ class OverlayPipeline:
                 f"{sticker_index}:v",
                 sticker_overlay,
                 suffix=f"_{index}",
+                canvas_width=job.video_width,
             )
             graph.add_chain(chain, output)
         return graph

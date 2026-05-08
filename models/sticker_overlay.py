@@ -10,7 +10,7 @@ from .overlay import OverlayBase
 @dataclass(slots=True)
 class StickerOverlay(OverlayBase):
     path: Path | None = None
-    scale: float = 1.0
+    scale: float = 0.16
     rotation: float = 0.0
 
     @property

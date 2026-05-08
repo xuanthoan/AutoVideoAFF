@@ -76,7 +76,7 @@ if QWidget:
             self.font_size = QSpinBox(); self.font_size.setRange(18, 260); self.font_size.setValue(96)
             self.motion = QComboBox(); self.motion.addItems(["None", "Fade", "Slide", "Bounce", "Pop", "Scale", "Drift"])
 
-            self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.1, 5.0); self.sticker_scale.setSingleStep(0.1); self.sticker_scale.setValue(1.0); self.sticker_scale.setSuffix("x")
+            self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.05, 0.45); self.sticker_scale.setSingleStep(0.01); self.sticker_scale.setDecimals(2); self.sticker_scale.setValue(0.16); self.sticker_scale.setSuffix(" canvas")
             self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Bounce", "Pop", "Slide Up", "Slide Down"])
 

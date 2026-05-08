@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.overlays.template_manager import TemplateManager
+from core.overlays.transform import OverlayTransform
 from core.overlays.typography_engine import SocialTypographyRenderer
 from core.safe_area_engine import NormalizedRect, SafeAreaEngine
 
@@ -40,7 +41,7 @@ if QLabel:
             self._text_pixmap_cache = None
             self._overlays = {
                 "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "start": 0.0, "end": 3.0},
-                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 1.0, "rotation": 0.0, "start": 0.0, "end": 3.0},
+                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "start": 0.0, "end": 3.0},
             }
             self._drag_kind: str | None = None
 
@@ -114,8 +115,9 @@ if QLabel:
                 return super().mouseMoveEvent(event)
             x = event.position().x()
             y = event.position().y()
-            center_x = self.width() / 2
-            center_y = self.height() / 2
+            canvas = self._canvas_rect()
+            center_x = canvas.center().x()
+            center_y = canvas.center().y()
             self._snap_x = None
             self._snap_y = None
             if self._snap_enabled and abs(x - center_x) <= self.SNAP_THRESHOLD:
@@ -124,8 +126,8 @@ if QLabel:
             if self._snap_enabled and abs(y - center_y) <= self.SNAP_THRESHOLD:
                 y = center_y
                 self._snap_y = int(center_y)
-            norm_x = min(max(x / max(self.width(), 1), 0.0), 1.0)
-            norm_y = min(max(y / max(self.height(), 1), 0.0), 1.0)
+            norm_x = min(max((x - canvas.left()) / max(canvas.width(), 1), 0.0), 1.0)
+            norm_y = min(max((y - canvas.top()) / max(canvas.height(), 1), 0.0), 1.0)
             norm_x, norm_y = self._clamp_to_safe_area(self._drag_kind, norm_x, norm_y)
             self.set_overlay_position(self._drag_kind, norm_x, norm_y)
             self.overlayMoved.emit(self._drag_kind, norm_x, norm_y)
@@ -163,21 +165,22 @@ if QLabel:
             if not self._overlay_visible(data) or not str(data["text"]).strip():
                 return
             template = self._template_manager.get(str(data["template"]))
-            key = (str(data["text"]), str(data["template"]), int(data["font_size"]), self.width(), self.height())
+            canvas = self._canvas_rect()
+            key = (str(data["text"]), str(data["template"]), int(data["font_size"]), round(canvas.width()), round(canvas.height()))
             if key != self._text_pixmap_cache_key or self._text_pixmap_cache is None:
                 image = self._typography_renderer.render_image(
                     str(data["text"]),
                     template,
                     int(data["font_size"]),
-                    self.width(),
-                    self.height(),
+                    round(canvas.width()),
+                    round(canvas.height()),
                 )
                 self._text_pixmap_cache = QPixmap.fromImage(image)
                 self._text_pixmap_cache_key = key
             pixmap = self._text_pixmap_cache
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
-            center = QPointF(float(data["x"]) * self.width(), float(data["y"]) * self.height())
+            center = QPointF(canvas.left() + float(data["x"]) * canvas.width(), canvas.top() + float(data["y"]) * canvas.height())
             painter.drawPixmap(QPointF(center.x() - pixmap.width() / 2, center.y() - pixmap.height() / 2), pixmap)
 
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
@@ -185,9 +188,17 @@ if QLabel:
             pixmap = data.get("pixmap")
             if not self._overlay_visible(data) or pixmap is None or pixmap.isNull():
                 return
+            canvas = self._canvas_rect()
+            target_width = OverlayTransform(
+                x=float(data["x"]),
+                y=float(data["y"]),
+                scale_ratio=float(data["scale"]),
+                rotation=float(data["rotation"]),
+            ).sticker_width_pixels(round(canvas.width()))
+            scaled = pixmap.scaled(target_width, target_width, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            data["w"] = scaled.width()
+            data["h"] = scaled.height()
             rect = self._overlay_rect("sticker")
-            base = min(180, max(42, 120 * float(data["scale"])))
-            scaled = pixmap.scaled(int(base), int(base), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             painter.save()
             center = rect.center()
             painter.translate(center)
@@ -215,11 +226,20 @@ if QLabel:
 
         def _overlay_rect(self, kind: str) -> QRectF:
             data = self._overlays[kind]
-            cx = float(data["x"]) * self.width()
-            cy = float(data["y"]) * self.height()
+            canvas = self._canvas_rect()
+            cx = canvas.left() + float(data["x"]) * canvas.width()
+            cy = canvas.top() + float(data["y"]) * canvas.height()
             w = float(data["w"])
             h = float(data["h"])
             return QRectF(cx - w / 2, cy - h / 2, w, h)
+
+        def _canvas_rect(self) -> QRectF:
+            pixmap = self.pixmap()
+            if pixmap is None or pixmap.isNull():
+                return QRectF(0, 0, self.width(), self.height())
+            x = (self.width() - pixmap.width()) / 2
+            y = (self.height() - pixmap.height()) / 2
+            return QRectF(x, y, pixmap.width(), pixmap.height())
 
         def _safe_rect(self, kind: str) -> QRectF:
             areas = self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform)
@@ -227,7 +247,13 @@ if QLabel:
             return self._rect_from_normalized(normalized)
 
         def _rect_from_normalized(self, rect: NormalizedRect) -> QRectF:
-            return QRectF(rect.x * self.width(), rect.y * self.height(), rect.width * self.width(), rect.height * self.height())
+            canvas = self._canvas_rect()
+            return QRectF(
+                canvas.left() + rect.x * canvas.width(),
+                canvas.top() + rect.y * canvas.height(),
+                rect.width * canvas.width(),
+                rect.height * canvas.height(),
+            )
 
         def _clamp_to_safe_area(self, kind: str, x: float, y: float) -> tuple[float, float]:
             rect = self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform)

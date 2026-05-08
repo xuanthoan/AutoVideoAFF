@@ -22,7 +22,7 @@ from models.overlay import MotionPreset
 from models.project_state import ProjectState, WorkflowMode
 from models.sticker_overlay import StickerOverlay
 from utils.ffmpeg_helper import FFmpegNotFoundError, probe_duration
-from utils.file_helper import output_directory
+from utils.file_helper import output_directory_for_videos
 
 
 if QMainWindow:
@@ -153,7 +153,7 @@ if QMainWindow:
             self.update_sticker_preview()
 
         def open_output_folder(self) -> None:
-            output_path = output_directory(self.state.export.output_dir).resolve()
+            output_path = output_directory_for_videos(self.state.videos, self.state.export.output_dir).resolve()
             output_path.mkdir(parents=True, exist_ok=True)
             self.append_log(f"[INFO] Mở thư mục output: {output_path}")
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path)))
@@ -372,7 +372,7 @@ if QMainWindow:
             self.export_button.setEnabled(False)
             self.stop_button.setEnabled(True)
             self.export_button.setText("Rendering...")
-            self.append_log(f"[INFO] Bắt đầu render batch vào: {output_directory(self.state.export.output_dir).resolve()}")
+            self.append_log(f"[INFO] Bắt đầu render batch vào: {output_directory_for_videos(self.state.videos, self.state.export.output_dir).resolve()}")
             self.thread = RenderThread(self.state)
             self.thread.progress.connect(self.render_progress)
             self.thread.log.connect(self.append_log)

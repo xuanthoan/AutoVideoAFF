@@ -69,5 +69,5 @@ CropFocus = Literal["top", "center", "bottom"]
 @dataclass(slots=True)
 class StickerAsset:
     path: Path
-    scale: float = 1.0
+    scale: float = 0.16
     rotation: float = 0.0

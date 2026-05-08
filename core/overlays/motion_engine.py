@@ -37,11 +37,11 @@ class MotionEngine:
             return f"if(gt(t,{max(duration - 0.35, 0):.3f}),max(0,({duration:.3f}-t)/0.35),1)"
         return "1"
 
-    def sticker_scale_expr(self, scale: float, motion: MotionPreset, start: float = 0.0) -> tuple[str, str]:
-        base_w = f"iw*{scale:.4f}"
-        base_h = f"ih*{scale:.4f}"
+    def sticker_scale_expr(self, scale_ratio: float, motion: MotionPreset, canvas_width: int, start: float = 0.0) -> tuple[str, str]:
+        target_w = max(1, round(canvas_width * min(max(scale_ratio, 0.01), 1.0)))
+        base_w = str(target_w)
         if motion in {MotionPreset.POP, MotionPreset.ZOOM, MotionPreset.SCALE}:
             local_t = f"(t-{max(0.0, float(start)):.3f})"
             pop = f"(0.65+0.35*min({local_t}/0.25\\,1)+0.08*sin(24*{local_t})*exp(-6*{local_t}))"
-            return f"{base_w}*{pop}", f"{base_h}*{pop}"
-        return base_w, base_h
+            return f"{base_w}*{pop}", "-1"
+        return base_w, "-1"
