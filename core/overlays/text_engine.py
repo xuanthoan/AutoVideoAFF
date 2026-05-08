@@ -15,6 +15,7 @@ class TextEngine:
         self.templates = TemplateManager()
         self.motion = MotionEngine()
         self.typography = SocialTypographyRenderer()
+        self._asset_cache: dict[tuple[str, str, int, int, int], Path] = {}
 
     def build_filter(
         self,
@@ -36,10 +37,19 @@ class TextEngine:
         temp_files: list[Path] | None = None,
     ) -> Path:
         template = self.templates.get(overlay.template)
-        handle = tempfile.NamedTemporaryFile(prefix="autovideoaff_text_", suffix=".png", delete=False)
+        key = (overlay.text, overlay.template, overlay.font_size, canvas_width, canvas_height)
+        path = self._asset_cache.get(key)
+        if path is None or not path.exists():
+            path = self._new_asset_path()
+            self.typography.render_png(path, overlay.text, template, overlay.font_size, canvas_width, canvas_height)
+            self._asset_cache[key] = path
+        if temp_files is not None and path not in temp_files:
+            temp_files.append(path)
+        return path
+
+    @staticmethod
+    def _new_asset_path() -> Path:
+        handle = tempfile.NamedTemporaryFile(prefix="autovideoaff_text_region_", suffix=".png", delete=False)
         path = Path(handle.name)
         handle.close()
-        self.typography.render_png(path, overlay.text, template, overlay.font_size, canvas_width, canvas_height)
-        if temp_files is not None:
-            temp_files.append(path)
         return path

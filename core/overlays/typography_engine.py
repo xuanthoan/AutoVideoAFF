@@ -48,6 +48,7 @@ class SocialTypographyRenderer:
         self.style = style or TypographyStyle()
 
     def render_image(self, text: str, template: TextTemplate, font_size: int, canvas_width: int, canvas_height: int):
+        """Return a minimal text bounding-box image, never a full-frame canvas."""
         if QImage is None:
             raise RuntimeError("PySide6 is required to render social typography assets.")
         self._ensure_qt_app()
@@ -93,6 +94,7 @@ class SocialTypographyRenderer:
         return image
 
     def render_png(self, path: Path, text: str, template: TextTemplate, font_size: int, canvas_width: int, canvas_height: int) -> Path:
+        """Write only the typography region PNG; FFmpeg positions it on the final canvas."""
         image = self.render_image(text, template, font_size, canvas_width, canvas_height)
         path.parent.mkdir(parents=True, exist_ok=True)
         if not image.save(str(path), "PNG"):
