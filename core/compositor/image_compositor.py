@@ -71,17 +71,23 @@ class ImageCompositor:
             )
             return nodes, out, plan
 
+        main_source_y = max(0, -plan.offset_y)
         nodes.extend(
             [
-                ("layout_video_split", f"[{video_label}]setpts=PTS-STARTPTS,split=2[mainv][fade_src]", None),
+                ("layout_video_split", f"[{video_label}]setpts=PTS-STARTPTS,split=2[main_src][fade_src]", None),
+                (
+                    "layout_main_region",
+                    f"[main_src]crop=w={video_width}:h={plan.main_video_h}:x=0:y={main_source_y}[mainv]",
+                    None,
+                ),
                 (
                     "layout_fade_region",
                     f"[fade_src]crop=w={video_width}:h={plan.overlap_h}:x=0:y={plan.source_y},"
                     f"format=yuva420p,geq=lum='p(X,Y)':a='255*(1-(Y/{plan.overlap_h}))'[fade]",
                     None,
                 ),
-                ("layout_main_overlay", f"[base][mainv]overlay=x=0:y={plan.offset_y}[shifted]", None),
-                ("layout_fade_overlay", f"[shifted][fade]overlay=x=0:y={plan.fade_start}[{out}]", out),
+                ("layout_main_overlay", f"[base][mainv]overlay=x=0:y=0[main_layer]", None),
+                ("layout_fade_overlay", f"[main_layer][fade]overlay=x=0:y={plan.fade_start}[{out}]", out),
             ]
         )
         return nodes, out, plan

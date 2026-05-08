@@ -28,6 +28,8 @@ class OverlayPipeline:
             )
             graph.debug_events.append(f"[OVERLAY] text index={index} asset={asset_path.name} region=minimal_bbox")
             graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
+            if "-shortest" not in graph.extra_args:
+                graph.extra_args.append("-shortest")
             text_index = sum(1 for token in graph.inputs if token == "-i")
             chain, output = self.text_engine.build_filter(
                 graph.video_label,

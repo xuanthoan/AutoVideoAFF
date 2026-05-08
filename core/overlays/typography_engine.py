@@ -79,7 +79,6 @@ class SocialTypographyRenderer:
         painter.setRenderHint(QPainter.TextAntialiasing)
         box = QRectF(shadow_pad, shadow_pad, box_width, box_height)
         radius = scaled_font * self.style.border_radius_ratio
-        self._draw_soft_shadow(painter, box, radius, scaled_font)
         painter.setBrush(QColor(template.box_color))
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(box, radius, radius)
@@ -100,17 +99,6 @@ class SocialTypographyRenderer:
         if not image.save(str(path), "PNG"):
             raise RuntimeError(f"Unable to write typography PNG: {path}")
         return path
-
-    def _draw_soft_shadow(self, painter, box, radius: float, font_size: int) -> None:
-        base = QColor(0, 0, 0, round(255 * self.style.shadow_opacity))
-        offset = max(2, round(font_size * 0.06))
-        for grow, alpha_scale in ((7, 0.12), (4, 0.20), (2, 0.32), (0, 0.50)):
-            color = QColor(base)
-            color.setAlpha(round(base.alpha() * alpha_scale))
-            painter.setBrush(color)
-            painter.setPen(Qt.NoPen)
-            shadow = box.adjusted(-grow, -grow + offset, grow, grow + offset)
-            painter.drawRoundedRect(shadow, radius + grow, radius + grow)
 
     @classmethod
     def _ensure_qt_app(cls) -> None:

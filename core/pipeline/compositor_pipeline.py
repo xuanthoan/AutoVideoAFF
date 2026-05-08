@@ -28,6 +28,12 @@ class ImageCompositePipeline:
             f"image_h={plan.image_h} overlap_h={plan.overlap_h} offset_y={plan.offset_y} "
             f"main_video_h={plan.main_video_h} fade_start={plan.fade_start} source_y={plan.source_y}"
         )
+        graph.debug_events.append(
+            "[FADE] "
+            f"image_h={plan.image_h} overlap_h={plan.overlap_h} "
+            f"visible_video_total={plan.visible_video_total} offset_y={plan.offset_y} "
+            f"fade_start={plan.fade_start} source_y={plan.source_y} fade_overlay_y={plan.fade_start}"
+        )
         for name, chain, output_label in nodes:
             graph.add_node(name, chain, output_label)
         graph.video_label = output

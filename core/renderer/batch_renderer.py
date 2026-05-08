@@ -83,6 +83,7 @@ class BatchRenderer:
                 cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
                 self._log_debug_events(log)
                 self._write_debug_filtergraph(cmd, output, log)
+                self._write_debug_fade_filter(cmd, output, log)
                 self._log(log, "INFO", "FFmpeg command: " + self._format_command(cmd))
                 self._run_command(cmd, log)
                 self._verify_output(temp_output, log)
@@ -153,6 +154,17 @@ class BatchRenderer:
         debug_path = output.parent / "debug_filtergraph.txt"
         debug_path.write_text(filtergraph, encoding="utf-8")
         self._log(log, "INFO", f"Saved FFmpeg filtergraph debug file: {debug_path}")
+
+    def _write_debug_fade_filter(self, cmd: list[str], output: Path, log: LogCallback | None) -> None:
+        if "-filter_complex" not in cmd:
+            return
+        filtergraph = cmd[cmd.index("-filter_complex") + 1]
+        fade_parts = [part for part in filtergraph.split(";") if "fade" in part or "[main_layer]" in part]
+        if not fade_parts:
+            return
+        debug_path = output.parent / "debug_fade_filter.txt"
+        debug_path.write_text(";\n".join(fade_parts), encoding="utf-8")
+        self._log(log, "INFO", f"Saved FFmpeg fade debug file: {debug_path}")
 
     def _cleanup_temp_files(self, paths: list[Path], log: LogCallback | None) -> None:
         for path in paths:
