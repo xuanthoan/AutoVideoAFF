@@ -81,6 +81,7 @@ class BatchRenderer:
                 self._log(log, "INFO", "Exporting final video...")
                 render_state = self._state_for_video(state)
                 cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
+                self._log_debug_events(log)
                 self._write_debug_filtergraph(cmd, output, log)
                 self._log(log, "INFO", "FFmpeg command: " + self._format_command(cmd))
                 self._run_command(cmd, log)
@@ -140,6 +141,10 @@ class BatchRenderer:
             self._log(log, "WARNING", "Video không có audio, xuất video không kèm audio.")
             return None
         raise RuntimeError(f"Không tách được audio gốc. {detail}")
+
+    def _log_debug_events(self, log: LogCallback | None) -> None:
+        for event in self.manager.last_debug_events:
+            self._log(log, "INFO", event)
 
     def _write_debug_filtergraph(self, cmd: list[str], output: Path, log: LogCallback | None) -> None:
         if "-filter_complex" not in cmd:

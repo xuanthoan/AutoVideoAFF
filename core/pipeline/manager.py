@@ -22,6 +22,7 @@ class PipelineManager:
         self.overlay = OverlayPipeline()
         self.export = FinalExportPipeline()
         self.last_temp_files: list[Path] = []
+        self.last_debug_events: list[str] = []
 
     def active_modules(self, state: ProjectState):
         modules = []
@@ -57,6 +58,10 @@ class PipelineManager:
         try:
             for module in self.active_modules(state):
                 graph = module.apply(job, graph)
+            graph.debug_events.append(
+                f"[FINAL] node_count={len(graph.nodes)} resolution={job.canvas_size} output={output_path.name}"
+            )
             return FFmpegBuilder().build(job, graph)
         finally:
             self.last_temp_files = list(graph.temp_files)
+            self.last_debug_events = list(graph.debug_events)

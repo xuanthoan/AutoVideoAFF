@@ -93,3 +93,5 @@ Output files are written with absolute paths under the app's `output/` directory
 - Output folders follow the source-video workflow: batch exports are written to `output/` beside the first video added to the queue, even when later videos come from other folders.
 - Stickers use normalized final-canvas scale (`target_width = canvas_width * sticker_scale_ratio`) in both preview and FFmpeg export, so preview and output share the same size and anchor model.
 - Image compositing uses the dynamic viewport fade layout (`image_h`, `overlap_h`, `offset_y`, `fade_start`, and mapped `source_y`) so the fade is tied to the visible overlap region rather than an arbitrary source-video strip.
+- Render internals are organized as multi-stage metadata/graph planning (`ShufflePlan`, `LayoutPlan`, named filter nodes, overlay region nodes, final render metadata) while still executing one final FFmpeg encode with no intermediate MP4 generation.
+- Render logs include structured `[SHUFFLE]`, `[LAYOUT]`, `[OVERLAY]`, and `[FINAL]` events for segment order, dynamic layout/fade coordinates, overlay region details, graph node count, and final resolution.
