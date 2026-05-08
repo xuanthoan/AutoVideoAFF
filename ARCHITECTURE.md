@@ -1,268 +1,270 @@
-# AutoVideoAFF — Current Architecture Handoff
+# AutoVideoAFF Internal Architecture
 
-This document summarizes the current repository architecture so future work can continue without rebuilding the app from scratch.
+_Last updated: 2026-05-08_
 
-## 1. Product Shape
+This document is the primary handoff reference for future development sessions. It describes the current architecture as implemented in the repository, not an idealized rewrite. Use it before changing renderer, GUI, timeline, animation, or output behavior.
 
-AutoVideoAFF is currently implemented as one unified Python desktop application for social-video batch production. The intended product is a PySide6 GUI that orchestrates FFmpeg/FFprobe and PySceneDetect; Python owns UI/state/planning, while FFmpeg owns final rendering/compositing/export.
+## 1. Product Goal
 
-Current top-level flow:
+AutoVideoAFF is a unified PySide6 desktop application for high-volume social video production. It targets TikTok, Instagram Reels, and YouTube Shorts workflows where users import many vertical videos, optionally shuffle scenes, add an image compositor/fade area, add text/sticker overlays, and batch export final videos with minimal clicks.
 
-1. User imports videos into the queue.
-2. User selects one workflow mode.
-3. GUI syncs controls into `ProjectState`.
-4. `BatchRenderer` processes queue sequentially.
-5. `PipelineManager` builds enabled pipeline modules.
-6. Pipeline modules append structured FFmpeg filter nodes into a `FilterGraph`.
-7. `FFmpegBuilder` emits one final FFmpeg command for each video.
-8. Output is written to an `output/` folder beside the first queued input video.
+The application intentionally remains one app with one render engine. It must not split into separate shuffle/compositor/overlay apps.
 
-## 2. Repository Layout
+## 2. Core Architectural Rules
+
+The current project is built around these rules:
+
+1. **Python is orchestration/UI only.**
+   - GUI, state management, planning, temporary overlay asset generation, and subprocess orchestration happen in Python.
+   - Final video rendering/compositing/export is done by FFmpeg.
+
+2. **Single final encode per output video.**
+   - Pipeline stages build metadata and filtergraph nodes.
+   - Stages must not export intermediate MP4/H264/H265 files.
+   - Temporary PNG overlay regions are allowed for typography/stickers because they are assets, not video re-encodes.
+
+3. **Modular pipeline system.**
+   - Workflow modes enable/disable modules.
+   - Modules append to a shared `FilterGraph`.
+   - `FinalExportPipeline` appends final codec/output args.
+
+4. **Final-canvas overlay space.**
+   - Text and sticker overlays use normalized coordinates relative to final output canvas.
+   - Overlays are post-composition elements, not attached to raw source pixels.
+
+5. **Preview/export parity is a design goal.**
+   - Preview should use the same coordinate, safe-area, motion, and typography concepts as FFmpeg export.
+   - Differences that remain should be treated as bugs or known risks.
+
+## 3. Repository Map
 
 ```text
-main.py                         # PySide6 app entry point
-models/                         # Serializable workflow/project/overlay state
-core/pipeline/                  # Modular render pipeline and render graph primitives
-core/compositor/                # Image layout + viewport fade compositing logic
-core/overlays/                  # Text/sticker/template/motion/typography engines
-core/renderer/                  # Batch renderer, FFmpeg command builder, preview frame extraction
-core/video/                     # Scene detection, fallback segmentation, timestamp helpers
-core/safe_area_engine.py        # Normalized TikTok/Reels/Shorts safe-area calculations
-gui/                            # Main window, queue, workflow panel, preview canvas, mini timeline
-utils/                          # FFmpeg lookup/probing, file paths, logging, process management
-assets/fonts/                   # Expected bundled font location
-AutoVideoAFF.spec               # PyInstaller spec
-requirements.txt                # Runtime dependencies
+main.py                         PySide6 app entry point.
+models/                         Dataclass state models for project, overlays, stickers, text.
+core/pipeline/                  Pipeline modules and render graph primitives.
+core/compositor/                Image compositor and viewport fade layout/filter construction.
+core/overlays/                  Template, typography, text, sticker, transform, motion engines.
+core/renderer/                  Batch renderer, FFmpeg command builder, preview frame extraction.
+core/video/                     Scene detection, fallback segmentation, timestamp constants.
+core/safe_area_engine.py        Normalized platform safe-area calculations.
+gui/                            Main window, queue, workflow panel, preview canvas, mini timeline.
+utils/                          FFmpeg lookup/probing, file helpers, process lifecycle, logging.
+assets/fonts/                   Expected bundled font location.
+AutoVideoAFF.spec               PyInstaller packaging spec.
+requirements.txt                PySide6 + PySceneDetect runtime dependencies.
 ```
 
-## 3. Core Data Model
+## 4. Main Runtime Flow
 
-`ProjectState` is the central object passed from GUI to renderer. It contains:
+High-level flow for one batch render:
 
-- `videos`: queue of input video paths.
+1. User imports videos through the queue panel.
+2. `MainWindow` stores paths in `ProjectState.videos`.
+3. User selects one workflow mode in `WorkflowPanel`.
+4. GUI controls sync into `ProjectState` before render.
+5. `RenderWorker` runs `BatchRenderer.render()` in a background thread.
+6. `BatchRenderer` validates FFmpeg/FFprobe, chooses output directory, and processes queue items sequentially.
+7. For each input video:
+   - output/temp paths are prepared;
+   - optional original audio extraction is attempted for shuffle pipelines;
+   - `PipelineManager.build_command()` probes video size and creates a `RenderJob`;
+   - active pipeline modules mutate a shared `FilterGraph`;
+   - `FFmpegBuilder` converts the graph into a final FFmpeg command;
+   - `ProcessManager` runs FFmpeg and can be stopped by the UI;
+   - output is verified with FFprobe and renamed from `.rendering.mp4` to final `.mp4`.
+
+## 5. Central State Model
+
+`models/project_state.py` is the source of truth passed from GUI to renderer.
+
+### `ProjectState`
+
+Important fields:
+
+- `videos`: batch queue.
 - `workflow_mode`: one of four mutually exclusive workflows.
-- `scene_shuffle`: scene detection/shuffle settings.
-- `image_composite`: image pool, crop focus, image height %, overlap %, fade curve.
-- `overlays`: text/sticker enable state plus primary overlay and multi-layer lists.
-- `export`: output, CRF, preset, auto-open, and developer-mode flags.
-- `safe_area`: internal always-on TikTok-style safe area and snap settings.
+- `scene_shuffle`: scene detection and fallback split settings.
+- `image_composite`: image pool, image height %, overlap %, crop focus, fade curve.
+- `overlays`: text/sticker settings plus multi-layer lists.
+- `export`: output folder, CRF, preset, auto-open, developer-mode flag.
+- `safe_area`: internal platform, safe area enabled, snap enabled.
 
-Overlay positions are normalized ratios (`x`, `y`) in final canvas space, not absolute pixels. Sticker scale is normalized relative to canvas width (`scale=0.16` means target sticker width ≈ 16% of final canvas width).
+### Overlay coordinate contract
 
-## 4. Workflow Modes
-
-The current enum supports four workflow modes:
-
-1. **Pipeline 1 — Shuffle + Image**
-   - Scene shuffle
-   - Image compositor
-   - No text/sticker overlay
-
-2. **Pipeline 2 — Shuffle + Image + Overlay**
-   - Scene shuffle
-   - Image compositor
-   - Text/sticker overlay
-
-3. **Pipeline 3 — Shuffle + Overlay**
-   - Scene shuffle
-   - Text/sticker overlay
-   - No image compositor
-
-4. **Pipeline 4 — Overlay Only**
-   - Original video as base
-   - Text/sticker overlay
-   - No shuffle/image/fade stages
-
-`PipelineManager.active_modules()` selects modules from workflow mode, then always appends final export.
-
-## 5. Render Graph Architecture
-
-The renderer has been refactored toward a multi-stage logic pipeline with a single final encode:
-
-- Stages produce metadata/filter graph nodes.
-- Stages must not export intermediate MP4/H264/H265 files.
-- `FilterGraph` stores:
-  - `inputs`
-  - named `FilterNode`s
-  - current `video_label`
-  - optional `audio_label`
-  - `extra_args`
-  - `temp_files`
-  - `shuffle_plan`
-  - `layout_plan`
-  - `debug_events`
-
-Important classes:
-
-- `FilterNode`: named FFmpeg chain node.
-- `ShufflePlan`: metadata list of shuffled segment start/end ranges.
-- `LayoutPlan`: canvas/image/overlap/fade coordinate calculations.
-- `RenderJob`: input/output/state/audio/video-size bundle.
-- `PipelineModule`: protocol implemented by pipeline modules.
-
-## 6. Shuffle Stage
-
-`SceneShufflePipeline` detects scenes using `SceneDetector`, falls back through `Segmenter`, shuffles video-only segments, and appends trim/concat nodes.
-
-Key behavior:
-
-- Keeps first segment by default.
-- Shuffles only video; audio is intended to be preserved separately.
-- Uses `trim`, `setpts`, and `concat=n=...:v=1:a=0`.
-- Adds timestamp args (`-fps_mode passthrough`, `-fflags +genpts`) and `-shortest`.
-- Stores a `ShufflePlan` for debug/inspection.
-
-## 7. Image Compositor / Viewport Fade
-
-`ImageCompositor` computes a `LayoutPlan` from the final canvas size:
+`OverlayBase.x` and `OverlayBase.y` are normalized final-canvas center coordinates:
 
 ```text
-image_h = image_height_percent * H
-overlap_h = overlap_percent * H
-visible_video_total = H - (image_h - overlap_h)
-offset_y = -(H - visible_video_total)
-main_video_h = visible_video_total - overlap_h
-image_top = H - image_h
-fade_start = image_top
-source_y = fade_start - offset_y
+x = 0.0 left edge, 0.5 center, 1.0 right edge
+y = 0.0 top edge,  0.5 center, 1.0 bottom edge
 ```
 
-Current graph intent:
+Do not store or pass preview pixels into the export renderer. Convert preview positions back to ratios.
 
-1. Prepare/crop background image.
-2. Create transparent/black base canvas.
-3. Overlay image at `image_top`.
-4. Split video into main/fade sources.
-5. Crop main visible region.
-6. Crop fade overlap region using `source_y`.
-7. Apply alpha with `format=yuva420p,geq=...`.
-8. Composite main region and fade strip above the image.
+Sticker scale is also normalized: `StickerOverlay.scale = 0.16` means the target sticker width is roughly `canvas_width * 0.16`.
 
-Important known caveat: recent patches changed main-video cropping to avoid hiding the fade strip. This likely fixed visibility, but should be verified on real media because fade/video continuity is sensitive to offset and crop coordinates.
+## 6. Workflow Modes
 
-## 8. Overlay Architecture
+The app supports four mutually exclusive workflow modes:
 
-Text and stickers are intended as final post-composition overlays, not attached to source video pixels.
+| Mode | Name | Enabled modules |
+| --- | --- | --- |
+| `PIPELINE_1` | Shuffle + Image | scene shuffle, image compositor, final export |
+| `PIPELINE_2` | Shuffle + Image + Overlay | scene shuffle, image compositor, overlay, final export |
+| `PIPELINE_3` | Shuffle + Overlay | scene shuffle, overlay, final export |
+| `PIPELINE_4` | Overlay Only | overlay, final export |
 
-### Text
+`gui/workflow_panel.py` contains `PIPELINE_CONFIG` for UI locking. `core/pipeline/manager.py` contains the renderer-side module selection.
 
-Current text export path:
+## 7. Pipeline and Render Graph Primitives
 
-1. `SocialTypographyRenderer` renders a minimal transparent RGBA text bounding-box PNG using Qt/QPainter.
-2. `TextEngine` caches static text assets by `(text, template, font_size, canvas_width, canvas_height)`.
-3. FFmpeg overlays that minimal PNG region onto final canvas using normalized final-canvas expressions.
+Defined in `core/pipeline/base.py`:
 
-This replaced raw `drawtext` to improve preview/export parity.
+- `FilterNode`: one named FFmpeg filter chain and optional output label.
+- `ShuffleSegment`: one start/end segment.
+- `ShufflePlan`: metadata for shuffled visual order.
+- `LayoutPlan`: computed image/video/fade layout values.
+- `FilterGraph`: shared mutable graph used by pipeline modules.
+- `RenderJob`: input/output/state/audio/video-size bundle.
+- `PipelineModule`: protocol for enabled/apply behavior.
 
-### Sticker
+`FilterGraph` is intentionally not a full DAG engine. It is a structured wrapper around ordered FFmpeg chains, inputs, extra args, temp files, and debug events.
 
-`StickerEngine` overlays sticker image assets directly. Sticker scale is based on final canvas width via `OverlayTransform.sticker_width_pixels()`.
+## 8. Pipeline Modules
 
-### Shared Transform
+### 8.1 `SceneShufflePipeline`
 
-`OverlayTransform` extracts normalized center position, scale ratio, rotation, timing, and motion from text/sticker models for shared preview/export math.
+Responsibilities:
 
-## 9. Motion System
+- Detect scenes using `SceneDetector` / PySceneDetect.
+- Fallback split using `Segmenter` if no useful scene list exists.
+- Keep the first segment, shuffle remaining visual segments.
+- Emit video-only `trim,setpts` nodes.
+- Concat shuffled video with `concat=n=...:v=1:a=0`.
+- Store `ShufflePlan` metadata.
 
-`MotionEngine` currently provides:
+Important: audio must not be shuffled. It is intended to be extracted/restored separately.
 
-- `position_expr()` for slide/bounce/drift-style position expressions.
-- `alpha_filter()` for FFmpeg alpha fade filters.
-- `region_scale_expr()` for dynamic scale/pop/bounce expressions.
-- `preview_alpha()` and `preview_scale()` for Qt preview parity.
-- `sticker_scale_expr()` for canvas-width-relative sticker scaling.
+### 8.2 `ImageCompositePipeline`
 
-Known limitation: motion coverage is incomplete and recently reported as broken for fade/pop/scale. See `BUGS.md`.
+Responsibilities:
 
-## 10. GUI Architecture
+- Pick an image from the image pool.
+- Add image input to the graph.
+- Ask `ImageCompositor` to compute a `LayoutPlan` and graph nodes.
+- Append `[LAYOUT]` and `[FADE]` debug events.
 
-Main GUI is in `gui/main_window.py`:
+### 8.3 `OverlayPipeline`
 
-- Left column: `QueuePanel` plus log box inside vertical `QSplitter`.
-- Center column: `PreviewCanvas` plus compact `MiniTimeline` below.
-- Right column: scrollable `WorkflowPanel`, fixed export/stop/open-output buttons.
+Responsibilities:
 
-### Workflow Panel
+- Render text overlays into minimal transparent PNG regions via `TextEngine` / Qt typography.
+- Add text PNG assets as looped inputs.
+- Add sticker inputs.
+- Apply text/sticker filters on top of the current `graph.video_label`.
+- Preserve overlay ordering: text layers first, then sticker layers.
 
-`WorkflowPanel` contains compact panels for:
+### 8.4 `FinalExportPipeline`
 
-- Pipeline mode
-- Shuffle controls
-- Image compositor controls
-- Text controls
-- Sticker controls
+Responsibilities:
 
-Pipeline-dependent UI locking is implemented with `PIPELINE_CONFIG` and panel dimming/disable logic.
+- Append codec/export args from `FFmpegBuilder.output_args()`.
+- Does not write files itself.
 
-### Preview Canvas
+## 9. GUI Architecture
 
-`PreviewCanvas`:
+The GUI is a three-column editor layout:
 
-- Displays extracted preview frame.
-- Draws safe area overlays.
-- Draws text/sticker overlays on top of preview.
-- Supports normalized drag, safe-area clamping, and center snapping guides.
-- Uses shared typography renderer and motion preview helpers.
+```text
+Left column:    queue + queue buttons + log panel
+Center column:  preview canvas + mini timeline
+Right column:   scrollable workflow panel + fixed render/stop/open controls
+```
 
-### Mini Timeline
+Important GUI classes:
 
-`MiniTimeline` is lightweight and overlay-only:
+- `gui/main_window.py`: app shell, state synchronization, render worker wiring, preview/timeline sync.
+- `gui/queue_panel.py`: video queue controls.
+- `gui/workflow_panel.py`: compact workflow controls and pipeline UI locking.
+- `gui/preview_canvas.py`: thumbnail preview, safe area, overlay preview, drag/snap.
+- `gui/mini_timeline.py`: lightweight overlay timing UI.
+- `gui/export_panel.py`: reusable export control primitives.
 
-- Tracks text/sticker timing blocks.
-- Supports playhead, play/pause/stop, drag/resize block timing, visibility toggles.
-- Syncs overlay active-at-time behavior with preview.
+## 10. Safe Area System
 
-## 11. Output and Process Management
+`core/safe_area_engine.py` calculates normalized TikTok/Reels/Shorts safe areas. The visible safe-area/snap settings panel was removed from the GUI; safe area and snapping are core behaviors enabled internally by default.
 
-`BatchRenderer`:
+Safe area applies to final canvas space. It should not be calculated from raw source video space after viewport/image offsets.
 
-- Sequentially renders queue items.
-- Uses `ProcessManager` so Stop can kill current FFmpeg process.
-- Creates temp render output `.name.rendering.mp4` then verifies and renames.
-- Cleans temporary overlay assets after each video.
-- Uses output folder beside the first queued video: `first_video_parent/output/`.
-- Skips failed videos and continues batch.
+## 11. Output Routing
 
-`FFmpegBuilder`:
+Output files are written beside the first imported video, not beside the project directory:
 
-- Adds input video, graph inputs, optional original audio input.
-- Maps final graph video label.
-- Adds audio mapping depending on `graph.audio_label` and `original_audio_path`.
-- Adds codec args and graph extra args.
+```text
+Input first video:  D:/CampaignA/video1.mp4
+Output folder:      D:/CampaignA/output/
+Output file:        D:/CampaignA/output/video1.mp4
+```
 
-## 12. Fonts / Templates
+If the queue contains videos from multiple folders, the first queued video determines the batch output root.
 
-`TemplateManager` contains the exact requested templates plus a `Random Template` option:
+`utils/file_helper.py` owns this behavior:
 
-1. Orange White — `#FFFFFF / #F58B57` currently (note: earlier requested exact color was `#F57C4D`, later typography request changed visual tone toward `#F58B57`).
-2. White Black
-3. Pink White
-4. Red White
-5. Yellow White
-6. Pastel Pink
-7. Green White
+- `output_directory_for_videos()`
+- `safe_output_path()`
+- `temporary_output_path()`
 
-Fonts are expected in `assets/fonts/`. Current implementation can fall back to system fonts if bundled fonts are missing; true production parity requires bundling Montserrat/Poppins font files.
+## 12. Process and Stop Handling
 
-## 13. Debug / Developer Mode
+`utils/process_manager.py` wraps subprocess execution. It tracks the active FFmpeg process and lets Stop kill it safely. `BatchRenderer.stop()` delegates to `ProcessManager.stop_all()`.
 
-`ExportSettings.developer_mode` exists and defaults to `False`.
+Batch render behavior:
 
-Current intent:
+- Sequential queue processing.
+- One video failure is logged and skipped.
+- Stop kills current process and stops the remaining queue.
+- Output is first written to a hidden `.rendering.mp4`, verified, then renamed.
 
-- Release mode should output only final video.
-- Debug filtergraph files should only be written when developer mode is enabled.
+## 13. Developer Mode and Debug Artifacts
 
-Verify this before release because prior user explicitly asked to avoid `debug_filtergraph.txt` and `debug_fade_filter.txt` in normal output.
+`ExportSettings.developer_mode` exists and defaults to `False`. Debug graph files are intended to be written only when developer mode is enabled.
 
-## 14. Current Technical Direction
+Current code paths include helpers for:
 
-Future work should continue with these principles:
+- `debug_filtergraph.txt`
+- `debug_fade_filter.txt`
 
-- Do not rebuild the app.
-- Keep single final FFmpeg encode per video.
-- Keep stages as metadata/filter-graph planning, not intermediate MP4s.
-- Keep overlays in final canvas space.
-- Keep text rendered as minimal RGBA regions, not full-frame PNG sequences.
-- Keep preview and output using shared transform/motion/typography math.
-- Make audio optional and command construction dynamic.
+Release behavior should produce only final videos unless developer mode is enabled.
+
+## 14. Known High-Priority Risks
+
+These are not solved by documentation and should be handled in future code sessions:
+
+1. **No-audio input hang risk.**
+   - Current audio handling still relies on optional extraction behavior and command-builder mapping should be audited.
+   - Final FFmpeg command generation must dynamically omit audio input/map/codec when no audio exists.
+
+2. **Overlay animation parity.**
+   - Fade/Pop/Scale have helper expressions, but real FFmpeg behavior should be verified on text and sticker assets.
+   - Sticker alpha fade must preserve existing PNG alpha.
+
+3. **Fade overlap validation.**
+   - The compositor now builds a visible fade layer, but real-media visual validation is still needed.
+
+4. **Template color drift.**
+   - Orange template was adjusted to `#F58B57` for preview/output tone, which differs from the earlier exact template spec `#F57C4D`.
+
+5. **Font availability.**
+   - Typography quality depends on bundling `Montserrat-ExtraBold.ttf` or `Poppins-ExtraBold.ttf` under `assets/fonts/`.
+
+## 15. Guidelines for Future Changes
+
+When modifying the app:
+
+- Do not rebuild the app from scratch.
+- Do not introduce MoviePy/OpenCV final rendering.
+- Do not add intermediate MP4 render stages.
+- Do not store overlay positions as preview pixels.
+- Do not attach overlays to pre-composited/shifted source video.
+- Keep timeline overlay-only and lightweight.
+- Keep text assets minimal-region PNGs, not full-frame RGBA sequences.
+- Add tests for generated filter strings whenever renderer logic changes.
