@@ -6,11 +6,11 @@ import tempfile
 from pathlib import Path
 
 try:
-    from PySide6.QtCore import QThread, QUrl, Signal
+    from PySide6.QtCore import Qt, QThread, QUrl, Signal
     from PySide6.QtGui import QDesktopServices
-    from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QPushButton, QStatusBar, QTextEdit, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
 except ImportError:
-    QThread = QUrl = Signal = QDesktopServices = QHBoxLayout = QMainWindow = QPushButton = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
+    Qt = QThread = QUrl = Signal = QDesktopServices = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.renderer.batch_renderer import BatchRenderer
 from core.renderer.preview_renderer import PreviewRenderer
@@ -68,20 +68,36 @@ if QMainWindow:
             self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
             self.log_box = QTextEdit()
             self.log_box.setReadOnly(True)
-            self.log_box.setMinimumHeight(160)
+            self.log_box.setMinimumHeight(140)
+            self.log_box.setMaximumHeight(220)
             self.log_box.setPlaceholderText("Log tiến trình render sẽ hiển thị tại đây...")
             self.status = QStatusBar()
             self.setStatusBar(self.status)
             self._wire()
             root = QWidget(); layout = QHBoxLayout(root)
-            layout.addWidget(self.queue, 1); layout.addWidget(self.preview, 2)
-            right = QVBoxLayout()
+            left_splitter = QSplitter(Qt.Vertical)
+            left_splitter.setMinimumWidth(280)
+            left_splitter.setMaximumWidth(340)
+            left_splitter.addWidget(self.queue)
+            left_splitter.addWidget(self.log_box)
+            left_splitter.setSizes([700, 240])
+
+            workflow_container = QWidget()
+            right = QVBoxLayout(workflow_container)
             right.addWidget(self.workflow)
             right.addWidget(self.export_button)
             right.addWidget(self.stop_button)
             right.addWidget(self.open_output_button)
-            right.addWidget(self.log_box)
-            layout.addLayout(right, 1)
+            right.addStretch()
+            right_scroll = QScrollArea()
+            right_scroll.setWidgetResizable(True)
+            right_scroll.setMinimumWidth(360)
+            right_scroll.setMaximumWidth(420)
+            right_scroll.setWidget(workflow_container)
+
+            layout.addWidget(left_splitter, 0)
+            layout.addWidget(self.preview, 1)
+            layout.addWidget(right_scroll, 0)
             self.setCentralWidget(root)
 
         def _wire(self) -> None:
@@ -91,10 +107,25 @@ if QMainWindow:
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
+            self.workflow.safeAreaChanged.connect(self.set_safe_area_options)
+            self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.overlayMoved.connect(self.set_overlay_position)
             self.export_button.clicked.connect(self.render)
             self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
+
+
+        def set_safe_area_options(self, platform: str, enabled: bool, snap_enabled: bool) -> None:
+            self.state.safe_area.platform = platform
+            self.state.safe_area.enabled = enabled
+            self.state.safe_area.snap_enabled = snap_enabled
+            self.preview.set_safe_area_options(platform, enabled, snap_enabled)
+
+        def sync_preview_panel_state(self) -> None:
+            mode = self.workflow.selected_workflow_mode()
+            overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
+            self.preview.set_overlay_active("text", overlay_pipeline and bool(self.state.overlays.text.text.strip()))
+            self.preview.set_overlay_active("sticker", overlay_pipeline and self.state.overlays.sticker.path is not None)
 
         def open_output_folder(self) -> None:
             output_path = output_directory(self.state.export.output_dir).resolve()
@@ -168,8 +199,8 @@ if QMainWindow:
             self.state.workflow_mode = mode
             self.state.scene_shuffle.enabled = mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3}
             self.state.scene_shuffle.sensitivity = float(self.workflow.scene_sensitivity.value())
-            self.state.scene_shuffle.random_mode = self.workflow.shuffle_random.isChecked()
-            self.state.scene_shuffle.keep_first_segment = self.workflow.keep_first_segment.isChecked()
+            self.state.scene_shuffle.random_mode = True
+            self.state.scene_shuffle.keep_first_segment = True
             self.state.scene_shuffle.fallback_min_seconds = float(self.workflow.fallback_min.value())
             self.state.scene_shuffle.fallback_max_seconds = max(float(self.workflow.fallback_max.value()), float(self.workflow.fallback_min.value()))
             self.state.image_composite.enabled = mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2} and bool(self.state.image_composite.image_pool)
@@ -177,6 +208,11 @@ if QMainWindow:
             self.state.image_composite.overlap_percent = min(float(self.workflow.overlap.value()), self.state.image_composite.image_height_percent)
             self.state.image_composite.crop_focus = self.workflow.crop_focus.currentText()
             self.state.image_composite.fade_curve = self.workflow.fade_curve.currentText()
+            self.set_safe_area_options(
+                self.workflow.safe_platform.currentText(),
+                self.workflow.safe_area_toggle.isChecked(),
+                self.workflow.snap_toggle.isChecked(),
+            )
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None

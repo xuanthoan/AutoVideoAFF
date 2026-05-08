@@ -1,4 +1,4 @@
-"""Right-side workflow controls."""
+"""Right-side workflow controls with pipeline-dependent UI locking."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,6 +13,7 @@ try:
         QDoubleSpinBox,
         QFileDialog,
         QFormLayout,
+        QGraphicsOpacityEffect,
         QGroupBox,
         QListWidget,
         QPushButton,
@@ -24,11 +25,19 @@ try:
     )
 except ImportError:
     Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
-    QButtonGroup = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = None
+    QButtonGroup = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
     QGroupBox = QListWidget = QPushButton = QRadioButton = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.overlays.template_manager import TemplateManager, TextTemplate
 from models.project_state import WorkflowMode
+
+
+PIPELINE_CONFIG = {
+    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "text": False, "sticker": False},
+    WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "text": True, "sticker": True},
+    WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "text": True, "sticker": True},
+    WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "text": True, "sticker": True},
+}
 
 
 if QWidget:
@@ -38,6 +47,7 @@ if QWidget:
         stickerSelected = Signal(str)
         stickerControlsChanged = Signal(float, float, str)
         textChanged = Signal(str)
+        safeAreaChanged = Signal(str, bool, bool)
 
         def __init__(self) -> None:
             super().__init__()
@@ -48,13 +58,12 @@ if QWidget:
                 button = QRadioButton(mode.value)
                 self.pipeline_buttons[mode] = button
                 self.pipeline_group.addButton(button)
+                button.toggled.connect(lambda _checked: self.apply_pipeline_ui_state())
             self.pipeline_buttons[WorkflowMode.PIPELINE_1].setChecked(True)
 
             self.scene_sensitivity = QSpinBox(); self.scene_sensitivity.setRange(10, 80); self.scene_sensitivity.setValue(30)
             self.fallback_min = QDoubleSpinBox(); self.fallback_min.setRange(1.0, 10.0); self.fallback_min.setValue(3.0); self.fallback_min.setSuffix("s")
             self.fallback_max = QDoubleSpinBox(); self.fallback_max.setRange(1.0, 12.0); self.fallback_max.setValue(5.0); self.fallback_max.setSuffix("s")
-            self.keep_first_segment = QCheckBox("Keep first segment"); self.keep_first_segment.setChecked(True)
-            self.shuffle_random = QCheckBox("Random shuffle"); self.shuffle_random.setChecked(True)
 
             self.image_list = QListWidget()
             self.image_height = QSpinBox(); self.image_height.setRange(20, 60); self.image_height.setValue(35); self.image_height.setSuffix("%")
@@ -72,6 +81,11 @@ if QWidget:
             self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.1, 5.0); self.sticker_scale.setSingleStep(0.1); self.sticker_scale.setValue(1.0); self.sticker_scale.setSuffix("x")
             self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Bounce", "Pop", "Slide Up", "Slide Down"])
+
+            self.safe_platform = QComboBox(); self.safe_platform.addItems(["TikTok", "Instagram Reels", "YouTube Shorts", "Custom"])
+            self.safe_area_toggle = QCheckBox("Show safe area"); self.safe_area_toggle.setChecked(True)
+            self.snap_toggle = QCheckBox("Enable snap"); self.snap_toggle.setChecked(True)
+
             sticker_button = QPushButton("Chọn sticker")
             image_button = QPushButton("Chọn ảnh (multi-select)")
             image_button.clicked.connect(self.pick_images)
@@ -82,23 +96,49 @@ if QWidget:
             self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
             self.image_height.valueChanged.connect(lambda _value: self._clamp_overlap())
+            self.safe_platform.currentTextChanged.connect(lambda _text: self.emit_safe_area())
+            self.safe_area_toggle.toggled.connect(lambda _checked: self.emit_safe_area())
+            self.snap_toggle.toggled.connect(lambda _checked: self.emit_safe_area())
 
             layout = QVBoxLayout(self)
-            for group in (
-                self._pipeline_group(),
-                self._scene_group(),
-                self._image_group(image_button),
-                self._text_group(),
-                self._sticker_group(sticker_button),
-            ):
+            self.pipeline_panel = self._pipeline_group()
+            self.shuffle_panel = self._scene_group()
+            self.image_panel = self._image_group(image_button)
+            self.text_panel = self._text_group()
+            self.sticker_panel = self._sticker_group(sticker_button)
+            self.safe_area_panel = self._safe_area_group()
+            for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.text_panel, self.sticker_panel, self.safe_area_panel):
                 layout.addWidget(group)
             layout.addStretch()
+            self.apply_pipeline_ui_state()
 
         def selected_workflow_mode(self) -> WorkflowMode:
             for mode, button in self.pipeline_buttons.items():
                 if button.isChecked():
                     return mode
             return WorkflowMode.PIPELINE_1
+
+        def apply_pipeline_ui_state(self) -> None:
+            config = PIPELINE_CONFIG[self.selected_workflow_mode()]
+            self._set_panel_state(self.shuffle_panel, config["shuffle"])
+            self._set_panel_state(self.image_panel, config["image"])
+            self._set_panel_state(self.text_panel, config["text"])
+            self._set_panel_state(self.sticker_panel, config["sticker"])
+            self.changed.emit()
+
+        def _set_panel_state(self, panel: QGroupBox, enabled: bool) -> None:
+            panel.setEnabled(enabled)
+            effect = panel.graphicsEffect()
+            if not isinstance(effect, QGraphicsOpacityEffect):
+                effect = QGraphicsOpacityEffect(panel)
+                panel.setGraphicsEffect(effect)
+            effect.setOpacity(1.0 if enabled else 0.38)
+            panel.setToolTip("" if enabled else "Disabled in current pipeline")
+            title_color = "#e8e8e8" if enabled else "#777"
+            panel.setStyleSheet(f"QGroupBox {{ color: {title_color}; font-weight: 600; }}")
+
+        def emit_safe_area(self) -> None:
+            self.safeAreaChanged.emit(self.safe_platform.currentText(), self.safe_area_toggle.isChecked(), self.snap_toggle.isChecked())
 
         def set_image_pool(self, paths: list[Path]) -> None:
             self.image_list.clear()
@@ -141,8 +181,6 @@ if QWidget:
             form.addRow("Scene Sensitivity", self.scene_sensitivity)
             form.addRow("Fallback min", self.fallback_min)
             form.addRow("Fallback max", self.fallback_max)
-            form.addRow(self.shuffle_random)
-            form.addRow(self.keep_first_segment)
             return group
 
         def _image_group(self, button):
@@ -172,6 +210,14 @@ if QWidget:
             form.addRow("Scale", self.sticker_scale)
             form.addRow("Rotation", self.sticker_rotation)
             form.addRow("Motion", self.sticker_motion)
+            return group
+
+        def _safe_area_group(self):
+            group = QGroupBox("6. SAFE AREA / SNAP")
+            form = QFormLayout(group)
+            form.addRow("Platform", self.safe_platform)
+            form.addRow(self.safe_area_toggle)
+            form.addRow(self.snap_toggle)
             return group
 
         def emit_sticker_controls(self) -> None:

@@ -60,3 +60,11 @@ Output files are written with absolute paths under the app's `output/` directory
 - The right workflow column includes dedicated controls for pipeline selection, shuffle sensitivity/fallback behavior, image multi-select compositing settings, text templates/motion, sticker properties/motion, and export actions.
 - Batch rendering processes each video independently: failed videos are logged and skipped, FFmpeg commands are retried once, and the Stop action terminates active FFmpeg subprocesses safely.
 - Render logs include timestamps, workflow status, FFmpeg commands, and stderr tails on failure without continuous frame-by-frame spam during successful renders.
+
+## Layout and workflow UX refactor
+
+- The main editor uses a 3-column layout with a 280-340px left queue/log splitter, a large center preview, and a 360-420px scrollable workflow column.
+- The log box lives only at the bottom of the left panel so workflow controls are no longer clipped by render logs.
+- Pipeline UI locking is centralized through `PIPELINE_CONFIG`; disabled panels are non-interactive, dimmed, and show a "Disabled in current pipeline" tooltip.
+- Shuffle workflow is simplified for mass social production: random shuffle and keep-first-segment are fixed internal defaults.
+- Safe areas are normalized via `SafeAreaEngine` with TikTok/Reels/Shorts/Custom presets; text safe width is intentionally narrower than sticker safe width and scales across 720x1280, 1080x1920, and other 9:16 resolutions.

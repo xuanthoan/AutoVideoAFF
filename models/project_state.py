@@ -14,6 +14,9 @@ AspectRatio = Literal["9:16", "1:1", "16:9"]
 FadeCurve = Literal["linear", "smooth", "strong"]
 
 
+PlatformPreset = Literal["TikTok", "Instagram Reels", "YouTube Shorts", "Custom"]
+
+
 class WorkflowMode(str, Enum):
     PIPELINE_1 = "Pipeline 1 — Shuffle + Image"
     PIPELINE_2 = "Pipeline 2 — Shuffle + Image + Overlay"
@@ -64,6 +67,13 @@ class ExportSettings:
 
 
 @dataclass(slots=True)
+class SafeAreaSettings:
+    platform: PlatformPreset = "TikTok"
+    enabled: bool = True
+    snap_enabled: bool = True
+
+
+@dataclass(slots=True)
 class ProjectState:
     videos: list[Path] = field(default_factory=list)
     workflow_mode: WorkflowMode = WorkflowMode.PIPELINE_1
@@ -71,6 +81,7 @@ class ProjectState:
     image_composite: ImageCompositeSettings = field(default_factory=ImageCompositeSettings)
     overlays: OverlaySettings = field(default_factory=OverlaySettings)
     export: ExportSettings = field(default_factory=ExportSettings)
+    safe_area: SafeAreaSettings = field(default_factory=SafeAreaSettings)
 
     def render_count_label(self) -> str:
         return f"Render Video ({len(self.videos)})" if self.videos else "Render Video"
