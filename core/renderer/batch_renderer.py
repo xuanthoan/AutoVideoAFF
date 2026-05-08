@@ -152,7 +152,7 @@ class BatchRenderer:
             try:
                 path.unlink(missing_ok=True)
             except OSError as exc:
-                self._log(log, "WARNING", f"Không xoá được file text overlay tạm: {path}. {exc}")
+                self._log(log, "WARNING", f"Không xoá được file overlay tạm: {path}. {exc}")
         paths.clear()
 
     def _run_command(self, cmd: list[str], log: LogCallback | None, retries: int = 1) -> None:

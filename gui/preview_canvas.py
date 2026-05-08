@@ -4,14 +4,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.overlays.template_manager import TemplateManager
+from core.overlays.typography_engine import SocialTypographyRenderer
 from core.safe_area_engine import NormalizedRect, SafeAreaEngine
 
 try:
     from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-    from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QTransform
+    from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
     from PySide6.QtWidgets import QLabel
 except ImportError:  # lets non-GUI CI import architecture modules without PySide6 installed
-    QPointF = QRectF = Qt = Signal = QColor = QFont = QPainter = QPen = QPixmap = QTransform = QLabel = None
+    QPointF = QRectF = Qt = Signal = QColor = QPainter = QPen = QPixmap = QLabel = None
 
 
 if QLabel:
@@ -33,7 +34,10 @@ if QLabel:
             self._safe_area_enabled = True
             self._snap_enabled = True
             self._template_manager = TemplateManager()
+            self._typography_renderer = SocialTypographyRenderer()
             self._current_time = 0.0
+            self._text_pixmap_cache_key = None
+            self._text_pixmap_cache = None
             self._overlays = {
                 "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "start": 0.0, "end": 3.0},
                 "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 1.0, "rotation": 0.0, "start": 0.0, "end": 3.0},
@@ -159,22 +163,22 @@ if QLabel:
             if not self._overlay_visible(data) or not str(data["text"]).strip():
                 return
             template = self._template_manager.get(str(data["template"]))
-            rect = self._overlay_rect("text")
-            font_size = max(12, int(float(data["font_size"]) * self.height() / 1920))
-            painter.setFont(QFont("Montserrat ExtraBold", font_size, QFont.Bold))
-            metrics = painter.fontMetrics()
-            lines = str(data["text"]).splitlines() or [str(data["text"])]
-            width = min(max(metrics.horizontalAdvance(line) for line in lines) + font_size * 1.6, self.width() * 0.74)
-            height = len(lines) * metrics.height() + max(0, len(lines) - 1) * int(font_size * 0.25) + font_size * 0.9
-            box = QRectF(rect.center().x() - width / 2, rect.center().y() - height / 2, width, height)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(template.box_color))
-            painter.drawRoundedRect(box, font_size * 0.35, font_size * 0.35)
-            painter.setPen(QColor(template.font_color))
-            y = box.top() + font_size * 0.45 + metrics.ascent()
-            for line in lines:
-                painter.drawText(QRectF(box.left(), y - metrics.ascent(), box.width(), metrics.height()), Qt.AlignCenter, line)
-                y += metrics.height() + int(font_size * 0.25)
+            key = (str(data["text"]), str(data["template"]), int(data["font_size"]), self.width(), self.height())
+            if key != self._text_pixmap_cache_key or self._text_pixmap_cache is None:
+                image = self._typography_renderer.render_image(
+                    str(data["text"]),
+                    template,
+                    int(data["font_size"]),
+                    self.width(),
+                    self.height(),
+                )
+                self._text_pixmap_cache = QPixmap.fromImage(image)
+                self._text_pixmap_cache_key = key
+            pixmap = self._text_pixmap_cache
+            data["w"] = pixmap.width()
+            data["h"] = pixmap.height()
+            center = QPointF(float(data["x"]) * self.width(), float(data["y"]) * self.height())
+            painter.drawPixmap(QPointF(center.x() - pixmap.width() / 2, center.y() - pixmap.height() / 2), pixmap)
 
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]

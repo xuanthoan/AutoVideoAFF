@@ -54,7 +54,9 @@ class PipelineManager:
             video_height=video_height,
         )
         graph = FilterGraph()
-        for module in self.active_modules(state):
-            graph = module.apply(job, graph)
-        self.last_temp_files = list(graph.temp_files)
-        return FFmpegBuilder().build(job, graph)
+        try:
+            for module in self.active_modules(state):
+                graph = module.apply(job, graph)
+            return FFmpegBuilder().build(job, graph)
+        finally:
+            self.last_temp_files = list(graph.temp_files)

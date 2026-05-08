@@ -1,4 +1,4 @@
-"""FFmpeg drawtext engine with multiline textfile support."""
+"""FFmpeg overlay engine for Qt-rendered social typography assets."""
 from __future__ import annotations
 
 import tempfile
@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.template_manager import TemplateManager
+from core.overlays.typography_engine import SocialTypographyRenderer
 from models.text_overlay import TextOverlay
 
 
@@ -13,44 +14,32 @@ class TextEngine:
     def __init__(self) -> None:
         self.templates = TemplateManager()
         self.motion = MotionEngine()
+        self.typography = SocialTypographyRenderer()
 
     def build_filter(
         self,
         video_label: str,
+        text_label: str,
         overlay: TextOverlay,
         suffix: str = "",
-        temp_files: list[Path] | None = None,
     ) -> tuple[str, str]:
-        template = self.templates.get(overlay.template)
         out = f"text_v{suffix}"
         x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time)
-        text_file = self._write_text_file(overlay.text)
+        chain = f"[{video_label}][{text_label}]overlay=x={x}:y={y}:enable='{enable}'[{out}]"
+        return chain, out
+
+    def render_asset(
+        self,
+        overlay: TextOverlay,
+        canvas_width: int,
+        canvas_height: int,
+        temp_files: list[Path] | None = None,
+    ) -> Path:
+        template = self.templates.get(overlay.template)
+        handle = tempfile.NamedTemporaryFile(prefix="autovideoaff_text_", suffix=".png", delete=False)
+        path = Path(handle.name)
+        handle.close()
+        self.typography.render_png(path, overlay.text, template, overlay.font_size, canvas_width, canvas_height)
         if temp_files is not None:
-            temp_files.append(text_file)
-        boxborder = template.padding
-        drawtext = (
-            f"[{video_label}]drawtext=textfile='{self._escape_filter_path(text_file)}':"
-            f"fontsize={overlay.font_size}:fontcolor={template.font_color}:"
-            f"borderw={template.stroke_width}:bordercolor={template.border_color}:shadowcolor={template.shadow_color}:"
-            f"shadowx=3:shadowy=3:line_spacing=12:box=1:boxcolor={template.box_color}:boxborderw={boxborder}:"
-            f"x={x}:y={y}+(max_glyph_a-text_h)/10:enable='{enable}'[{out}]"
-        )
-        return drawtext, out
-
-    @staticmethod
-    def _write_text_file(text: str) -> Path:
-        handle = tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            newline="\n",
-            prefix="autovideoaff_text_",
-            suffix=".txt",
-            delete=False,
-        )
-        with handle:
-            handle.write(text)
-        return Path(handle.name)
-
-    @staticmethod
-    def _escape_filter_path(path: Path) -> str:
-        return path.resolve().as_posix().replace("'", "\\'").replace(":", "\\:")
+            temp_files.append(path)
+        return path

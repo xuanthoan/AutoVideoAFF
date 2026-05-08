@@ -14,7 +14,7 @@ class StickerEngine:
         out = f"sticker_v{suffix}"
         prepared = f"sticker_src{suffix}"
         x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time)
-        width_expr, height_expr = self.motion.sticker_scale_expr(overlay.scale, overlay.motion)
+        width_expr, height_expr = self.motion.sticker_scale_expr(overlay.scale, overlay.motion, overlay.start_time)
         fade_filter = self._fade_filter(overlay)
         chain = (
             f"[{sticker_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame,"

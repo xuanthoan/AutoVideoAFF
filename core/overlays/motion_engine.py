@@ -10,8 +10,8 @@ from models.overlay import MotionPreset
 
 class MotionEngine:
     def position_expr(self, x: float, y: float, motion: MotionPreset, start: float, end: float) -> tuple[str, str, str]:
-        base_x = f"(W-w)*{x:.4f}"
-        base_y = f"(H-h)*{y:.4f}"
+        base_x = f"W*{x:.4f}-w/2"
+        base_y = f"H*{y:.4f}-h/2"
         start = max(0.0, float(start))
         end = max(start + 0.1, float(end))
         enable = f"between(t,{start:.3f},{end:.3f})"
@@ -37,10 +37,11 @@ class MotionEngine:
             return f"if(gt(t,{max(duration - 0.35, 0):.3f}),max(0,({duration:.3f}-t)/0.35),1)"
         return "1"
 
-    def sticker_scale_expr(self, scale: float, motion: MotionPreset) -> tuple[str, str]:
+    def sticker_scale_expr(self, scale: float, motion: MotionPreset, start: float = 0.0) -> tuple[str, str]:
         base_w = f"iw*{scale:.4f}"
         base_h = f"ih*{scale:.4f}"
         if motion in {MotionPreset.POP, MotionPreset.ZOOM, MotionPreset.SCALE}:
-            pop = "(0.65+0.35*min(t/0.25\\,1)+0.08*sin(24*t)*exp(-6*t))"
+            local_t = f"(t-{max(0.0, float(start)):.3f})"
+            pop = f"(0.65+0.35*min({local_t}/0.25\\,1)+0.08*sin(24*{local_t})*exp(-6*{local_t}))"
             return f"{base_w}*{pop}", f"{base_h}*{pop}"
         return base_w, base_h

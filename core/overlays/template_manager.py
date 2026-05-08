@@ -19,7 +19,7 @@ class TextTemplate:
 class TemplateManager:
     RANDOM_TEMPLATE_NAME = "Random Template"
     BUILT_INS = [
-        TextTemplate("Orange White", "#FFFFFF", "#F57C4D", "#FFFFFF", "black@0.35", ("#FFFFFF", "#F57C4D")),
+        TextTemplate("Orange White", "#FFFFFF", "#F58B57", "#FFFFFF", "black@0.22", ("#FFFFFF", "#F58B57")),
         TextTemplate("White Black", "#000000", "#FFFFFF", "#000000", "black@0.20", ("#000000", "#FFFFFF")),
         TextTemplate("Pink White", "#FFFFFF", "#FF3FA4", "#FFFFFF", "black@0.35", ("#FFFFFF", "#FF3FA4")),
         TextTemplate("Red White", "#FFFFFF", "#FF4B4B", "#FFFFFF", "black@0.35", ("#FFFFFF", "#FF4B4B")),

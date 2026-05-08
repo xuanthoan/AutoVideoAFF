@@ -19,7 +19,20 @@ class OverlayPipeline:
     def apply(self, job: RenderJob, graph: FilterGraph) -> FilterGraph:
         overlays = job.state.overlays
         for index, text_overlay in enumerate(overlays.text_overlays(), start=1):
-            chain, output = self.text_engine.build_filter(graph.video_label, text_overlay, suffix=f"_{index}", temp_files=graph.temp_files)
+            asset_path = self.text_engine.render_asset(
+                text_overlay,
+                job.video_width,
+                job.video_height,
+                temp_files=graph.temp_files,
+            )
+            graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
+            text_index = sum(1 for token in graph.inputs if token == "-i")
+            chain, output = self.text_engine.build_filter(
+                graph.video_label,
+                f"{text_index}:v",
+                text_overlay,
+                suffix=f"_{index}",
+            )
             graph.add_chain(chain, output)
         for index, sticker_overlay in enumerate(overlays.sticker_overlays(), start=1):
             graph.inputs.extend(["-i", str(sticker_overlay.path)])

@@ -83,3 +83,9 @@ Output files are written with absolute paths under the app's `output/` directory
 - Each overlay stores `start_time`, `end_time`, and derived `duration`; new text and sticker overlays default to `0 → video_duration` when a source duration is available.
 - Preview redraws are lightweight and synchronized with the playhead, so overlays are visible only while the current time is inside their timing window.
 - Final export remains FFmpeg-based; overlay filters use `enable='between(t,start,end)'` timing expressions instead of realtime encoding or NLE-style timeline rendering.
+
+## Final-canvas social typography export
+
+- Text and sticker overlays are post-composition overlays: scene shuffle and image compositing build the final canvas first, then overlays are applied in final canvas coordinates.
+- The preview is the visual master for social typography. Export text is rendered with the same Qt/QPainter typography renderer into transparent RGBA PNG assets and then composited by FFmpeg, instead of using raw `drawtext`.
+- Typography uses the same padding, multiline line spacing, rounded background, optical centering, and soft shadow in preview and export. Place `Montserrat-ExtraBold.ttf` and `Poppins-ExtraBold.ttf` in `assets/fonts/` for bundled font consistency.
