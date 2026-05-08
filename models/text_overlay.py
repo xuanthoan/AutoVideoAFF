@@ -9,7 +9,7 @@ from .overlay import OverlayBase
 @dataclass(slots=True)
 class TextOverlay(OverlayBase):
     text: str = ""
-    template: str = "Impact Pop"
+    template: str = "Orange White"
     font_size: int = 96
 
     @property

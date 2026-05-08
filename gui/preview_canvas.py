@@ -1,16 +1,17 @@
-"""Realtime preview canvas with safe-area, drag, and snap guides."""
+"""Realtime preview canvas with safe-area, live overlays, and snap guides."""
 from __future__ import annotations
 
 from pathlib import Path
 
+from core.overlays.template_manager import TemplateManager
 from core.safe_area_engine import NormalizedRect, SafeAreaEngine
 
 try:
-    from PySide6.QtCore import QRectF, Qt, Signal
-    from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+    from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+    from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QTransform
     from PySide6.QtWidgets import QLabel
 except ImportError:  # lets non-GUI CI import architecture modules without PySide6 installed
-    QRectF = Qt = Signal = QColor = QPainter = QPen = QPixmap = QLabel = None
+    QPointF = QRectF = Qt = Signal = QColor = QFont = QPainter = QPen = QPixmap = QTransform = QLabel = None
 
 
 if QLabel:
@@ -31,9 +32,10 @@ if QLabel:
             self._safe_area_platform = "TikTok"
             self._safe_area_enabled = True
             self._snap_enabled = True
+            self._template_manager = TemplateManager()
             self._overlays = {
-                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 220, "h": 70},
-                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120},
+                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96},
+                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 1.0, "rotation": 0.0},
             }
             self._drag_kind: str | None = None
 
@@ -52,6 +54,20 @@ if QLabel:
                 self.setText("")
                 self._source_pixmap = pixmap
                 self._apply_scaled_pixmap()
+            self.update()
+
+        def set_text_overlay(self, text: str, template: str, font_size: int, active: bool) -> None:
+            data = self._overlays["text"]
+            data.update({"text": text, "template": template, "font_size": font_size, "active": active})
+            self.update()
+
+        def set_sticker_overlay(self, path: Path | None, scale: float, rotation: float, active: bool) -> None:
+            data = self._overlays["sticker"]
+            pixmap = data.get("pixmap")
+            if path is not None and (data.get("path") != path or pixmap is None):
+                pixmap = QPixmap(str(path))
+                data["path"] = path
+            data.update({"pixmap": pixmap, "scale": scale, "rotation": rotation, "active": active and pixmap is not None and not pixmap.isNull()})
             self.update()
 
         def set_overlay_active(self, kind: str, active: bool) -> None:
@@ -118,14 +134,51 @@ if QLabel:
             painter.setRenderHint(QPainter.Antialiasing)
             if self._safe_area_enabled:
                 self._draw_safe_area(painter)
-            self._draw_overlay_proxy(painter, "text", QColor(245, 124, 77, 180))
-            self._draw_overlay_proxy(painter, "sticker", QColor(255, 255, 255, 150))
+            self._draw_text_overlay(painter)
+            self._draw_sticker_overlay(painter)
             guide_pen = QPen(QColor(90, 190, 255, 170), 2)
             painter.setPen(guide_pen)
             if self._snap_x is not None:
                 painter.drawLine(self._snap_x, 0, self._snap_x, self.height())
             if self._snap_y is not None:
                 painter.drawLine(0, self._snap_y, self.width(), self._snap_y)
+
+        def _draw_text_overlay(self, painter: QPainter) -> None:
+            data = self._overlays["text"]
+            if not data["active"] or not str(data["text"]).strip():
+                return
+            template = self._template_manager.get(str(data["template"]))
+            rect = self._overlay_rect("text")
+            font_size = max(12, int(float(data["font_size"]) * self.height() / 1920))
+            painter.setFont(QFont("Montserrat ExtraBold", font_size, QFont.Bold))
+            metrics = painter.fontMetrics()
+            lines = str(data["text"]).splitlines() or [str(data["text"])]
+            width = min(max(metrics.horizontalAdvance(line) for line in lines) + font_size * 1.6, self.width() * 0.74)
+            height = len(lines) * metrics.height() + max(0, len(lines) - 1) * int(font_size * 0.25) + font_size * 0.9
+            box = QRectF(rect.center().x() - width / 2, rect.center().y() - height / 2, width, height)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(template.box_color))
+            painter.drawRoundedRect(box, font_size * 0.35, font_size * 0.35)
+            painter.setPen(QColor(template.font_color))
+            y = box.top() + font_size * 0.45 + metrics.ascent()
+            for line in lines:
+                painter.drawText(QRectF(box.left(), y - metrics.ascent(), box.width(), metrics.height()), Qt.AlignCenter, line)
+                y += metrics.height() + int(font_size * 0.25)
+
+        def _draw_sticker_overlay(self, painter: QPainter) -> None:
+            data = self._overlays["sticker"]
+            pixmap = data.get("pixmap")
+            if not data["active"] or pixmap is None or pixmap.isNull():
+                return
+            rect = self._overlay_rect("sticker")
+            base = min(180, max(42, 120 * float(data["scale"])))
+            scaled = pixmap.scaled(int(base), int(base), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            painter.save()
+            center = rect.center()
+            painter.translate(center)
+            painter.rotate(float(data["rotation"]))
+            painter.drawPixmap(QPointF(-scaled.width() / 2, -scaled.height() / 2), scaled)
+            painter.restore()
 
         def _draw_safe_area(self, painter: QPainter) -> None:
             text_rect = self._safe_rect("text")
@@ -141,14 +194,6 @@ if QLabel:
             painter.setPen(QPen(QColor(255, 90, 90, 70), 1, Qt.DotLine))
             for zone in self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform).ui_exclusion_zones:
                 painter.drawRect(self._rect_from_normalized(zone))
-
-        def _draw_overlay_proxy(self, painter: QPainter, kind: str, color: QColor) -> None:
-            if not self._overlays[kind]["active"]:
-                return
-            rect = self._overlay_rect(kind)
-            painter.setPen(QPen(color, 2))
-            painter.drawRoundedRect(rect, 8, 8)
-            painter.drawText(rect, Qt.AlignCenter, "TEXT" if kind == "text" else "STICKER")
 
         def _overlay_rect(self, kind: str) -> QRectF:
             data = self._overlays[kind]

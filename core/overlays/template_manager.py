@@ -17,6 +17,7 @@ class TextTemplate:
 
 
 class TemplateManager:
+    RANDOM_TEMPLATE_NAME = "Random Template"
     BUILT_INS = [
         TextTemplate("Orange White", "#FFFFFF", "#F57C4D", "#FFFFFF", "black@0.35", ("#FFFFFF", "#F57C4D")),
         TextTemplate("White Black", "#000000", "#FFFFFF", "#000000", "black@0.20", ("#000000", "#FFFFFF")),
@@ -31,4 +32,13 @@ class TemplateManager:
         return [template.name for template in self.BUILT_INS]
 
     def get(self, name: str) -> TextTemplate:
+        if name == self.RANDOM_TEMPLATE_NAME:
+            return self.BUILT_INS[0]
         return next((template for template in self.BUILT_INS if template.name == name), self.BUILT_INS[0])
+
+    def random_name(self, last_name: str | None = None) -> str:
+        import random
+
+        names = self.names()
+        choices = [name for name in names if name != last_name] or names
+        return random.choice(choices)

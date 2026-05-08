@@ -68,3 +68,10 @@ Output files are written with absolute paths under the app's `output/` directory
 - Pipeline UI locking is centralized through `PIPELINE_CONFIG`; disabled panels are non-interactive, dimmed, and show a "Disabled in current pipeline" tooltip.
 - Shuffle workflow is simplified for mass social production: random shuffle and keep-first-segment are fixed internal defaults.
 - Safe areas are normalized via `SafeAreaEngine` with TikTok/Reels/Shorts/Custom presets; text safe width is intentionally narrower than sticker safe width and scales across 720x1280, 1080x1920, and other 9:16 resolutions.
+
+## Live preview and compact UX update
+
+- The visible Safe Area / Snap settings panel was removed; TikTok safe area and snapping now run as always-on internal editor defaults.
+- Render, Stop, and Open Output Folder buttons are fixed below the scrollable workflow controls so they remain visible while editing.
+- The template dropdown includes `Random Template`; batch rendering chooses a built-in template per video and avoids immediate repeats.
+- Text and sticker edits update directly on the preview canvas from clean source assets without recursive framebuffer rendering.

@@ -83,21 +83,29 @@ if QMainWindow:
             left_splitter.setSizes([700, 240])
 
             workflow_container = QWidget()
-            right = QVBoxLayout(workflow_container)
-            right.addWidget(self.workflow)
-            right.addWidget(self.export_button)
-            right.addWidget(self.stop_button)
-            right.addWidget(self.open_output_button)
-            right.addStretch()
+            workflow_layout = QVBoxLayout(workflow_container)
+            workflow_layout.setContentsMargins(4, 4, 4, 4)
+            workflow_layout.setSpacing(4)
+            workflow_layout.addWidget(self.workflow)
+            workflow_layout.addStretch()
             right_scroll = QScrollArea()
             right_scroll.setWidgetResizable(True)
-            right_scroll.setMinimumWidth(360)
-            right_scroll.setMaximumWidth(420)
             right_scroll.setWidget(workflow_container)
+
+            right_column = QWidget()
+            right_column.setMinimumWidth(360)
+            right_column.setMaximumWidth(420)
+            right_column_layout = QVBoxLayout(right_column)
+            right_column_layout.setContentsMargins(0, 0, 0, 0)
+            right_column_layout.setSpacing(6)
+            right_column_layout.addWidget(right_scroll, 1)
+            right_column_layout.addWidget(self.export_button)
+            right_column_layout.addWidget(self.stop_button)
+            right_column_layout.addWidget(self.open_output_button)
 
             layout.addWidget(left_splitter, 0)
             layout.addWidget(self.preview, 1)
-            layout.addWidget(right_scroll, 0)
+            layout.addWidget(right_column, 0)
             self.setCentralWidget(root)
 
         def _wire(self) -> None:
@@ -107,7 +115,9 @@ if QMainWindow:
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
-            self.workflow.safeAreaChanged.connect(self.set_safe_area_options)
+            self.workflow.template.currentTextChanged.connect(lambda _text: self.update_text_preview())
+            self.workflow.font_size.valueChanged.connect(lambda _value: self.update_text_preview())
+            self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.overlayMoved.connect(self.set_overlay_position)
             self.export_button.clicked.connect(self.render)
@@ -115,7 +125,7 @@ if QMainWindow:
             self.open_output_button.clicked.connect(self.open_output_folder)
 
 
-        def set_safe_area_options(self, platform: str, enabled: bool, snap_enabled: bool) -> None:
+        def set_safe_area_options(self, platform: str = "TikTok", enabled: bool = True, snap_enabled: bool = True) -> None:
             self.state.safe_area.platform = platform
             self.state.safe_area.enabled = enabled
             self.state.safe_area.snap_enabled = snap_enabled
@@ -124,8 +134,8 @@ if QMainWindow:
         def sync_preview_panel_state(self) -> None:
             mode = self.workflow.selected_workflow_mode()
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
-            self.preview.set_overlay_active("text", overlay_pipeline and bool(self.state.overlays.text.text.strip()))
-            self.preview.set_overlay_active("sticker", overlay_pipeline and self.state.overlays.sticker.path is not None)
+            self.update_text_preview()
+            self.update_sticker_preview()
 
         def open_output_folder(self) -> None:
             output_path = output_directory(self.state.export.output_dir).resolve()
@@ -154,16 +164,14 @@ if QMainWindow:
                 self.workflow.sticker_motion.currentText(),
             )
             self.state.overlays.sticker_enabled = True
-            self.preview.set_overlay_active("sticker", True)
-            self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
+            self.update_sticker_preview()
             self.append_log(f"[INFO] Đã chọn sticker: {Path(path).name}")
 
         def set_sticker_controls(self, scale: float, rotation: float, motion: str) -> None:
             self.state.overlays.sticker.scale = scale
             self.state.overlays.sticker.rotation = rotation
             self.state.overlays.sticker.motion = MotionPreset.from_label(motion)
-            self.preview.set_overlay_active("sticker", self.state.overlays.sticker.active)
-            self.preview.update()
+            self.update_sticker_preview()
 
         def set_overlay_position(self, kind: str, x: float, y: float) -> None:
             if kind == "text":
@@ -173,12 +181,37 @@ if QMainWindow:
                 self.state.overlays.sticker.x = x
                 self.state.overlays.sticker.y = y
 
+
+        def update_text_preview(self) -> None:
+            self.state.overlays.text.template = self.workflow.template.currentText()
+            self.state.overlays.text.font_size = self.workflow.font_size.value()
+            self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
+            mode = self.workflow.selected_workflow_mode()
+            active = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and self.state.overlays.text.active
+            self.preview.set_text_overlay(
+                self.state.overlays.text.text,
+                self.state.overlays.text.template,
+                self.state.overlays.text.font_size,
+                active,
+            )
+            self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
+
+        def update_sticker_preview(self) -> None:
+            mode = self.workflow.selected_workflow_mode()
+            active = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and self.state.overlays.sticker.active
+            self.preview.set_sticker_overlay(
+                self.state.overlays.sticker.path,
+                self.state.overlays.sticker.scale,
+                self.state.overlays.sticker.rotation,
+                active,
+            )
+            self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
+
         def set_text(self, text: str) -> None:
             self.state.overlays.text.text = text
             active = bool(text.strip())
             self.state.overlays.text_enabled = active
-            self.preview.set_overlay_active("text", active)
-            self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
+            self.update_text_preview()
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
 
         def update_preview(self, video_path: Path) -> None:
@@ -208,11 +241,7 @@ if QMainWindow:
             self.state.image_composite.overlap_percent = min(float(self.workflow.overlap.value()), self.state.image_composite.image_height_percent)
             self.state.image_composite.crop_focus = self.workflow.crop_focus.currentText()
             self.state.image_composite.fade_curve = self.workflow.fade_curve.currentText()
-            self.set_safe_area_options(
-                self.workflow.safe_platform.currentText(),
-                self.workflow.safe_area_toggle.isChecked(),
-                self.workflow.snap_toggle.isChecked(),
-            )
+            self.set_safe_area_options("TikTok", True, True)
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None

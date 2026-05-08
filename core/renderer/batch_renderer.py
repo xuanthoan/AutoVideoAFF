@@ -1,12 +1,14 @@
 """Sequential batch renderer that keeps the UI responsive via callbacks."""
 from __future__ import annotations
 
+import copy
 import subprocess
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from core.pipeline.manager import PipelineManager
+from core.overlays.template_manager import TemplateManager
 from models.project_state import ProjectState, WorkflowMode
 from utils.ffmpeg_helper import FFmpegNotFoundError, executable, validate_ffmpeg_pair
 from utils.file_helper import safe_output_path, temporary_output_path
@@ -21,6 +23,8 @@ class BatchRenderer:
         self.manager = manager or PipelineManager()
         self.debug = debug
         self.process_manager = ProcessManager()
+        self.template_manager = TemplateManager()
+        self._last_random_template: str | None = None
 
     def stop(self) -> None:
         self.process_manager.stop_all()
@@ -73,7 +77,8 @@ class BatchRenderer:
                 if state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and state.overlays.enabled:
                     self._log(log, "INFO", "Rendering overlays...")
                 self._log(log, "INFO", "Exporting final video...")
-                cmd = self.manager.build_command(video, temp_output, state, original_audio_path=original_audio_path)
+                render_state = self._state_for_video(state)
+                cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
                 self._log(log, "INFO", "FFmpeg command: " + self._format_command(cmd))
                 self._run_command(cmd, log)
                 self._verify_output(temp_output, log)
@@ -96,6 +101,16 @@ class BatchRenderer:
         else:
             self._log(log, "SUCCESS", "Render batch hoàn tất.")
         return outputs
+
+
+    def _state_for_video(self, state: ProjectState) -> ProjectState:
+        if state.overlays.text.template != TemplateManager.RANDOM_TEMPLATE_NAME:
+            return state
+        render_state = copy.deepcopy(state)
+        selected = self.template_manager.random_name(self._last_random_template)
+        self._last_random_template = selected
+        render_state.overlays.text.template = selected
+        return render_state
 
     def _extract_original_audio(self, video: Path, audio_output: Path, log: LogCallback | None) -> Path | None:
         copy_cmd = [executable("ffmpeg"), "-y", "-i", str(video), "-vn", "-acodec", "copy", str(audio_output)]
