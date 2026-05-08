@@ -1,8 +1,6 @@
 """FFmpeg drawtext engine with multiline background support."""
 from __future__ import annotations
 
-from shlex import quote
-
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.template_manager import TemplateManager
 from models.text_overlay import TextOverlay
@@ -13,12 +11,11 @@ class TextEngine:
         self.templates = TemplateManager()
         self.motion = MotionEngine()
 
-    def build_filter(self, video_label: str, overlay: TextOverlay) -> tuple[str, str]:
+    def build_filter(self, video_label: str, overlay: TextOverlay, suffix: str = "") -> tuple[str, str]:
         template = self.templates.get(overlay.template)
-        out = "text_v"
-        x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.duration)
+        out = f"text_v{suffix}"
+        x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time)
         text = overlay.text.replace("'", "\\'").replace(":", "\\:")
-        line_h = f"{overlay.font_size + 12}"
         boxborder = template.padding
         drawtext = (
             f"[{video_label}]drawtext=text='{text}':fontsize={overlay.font_size}:fontcolor={template.font_color}:"

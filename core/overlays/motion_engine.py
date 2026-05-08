@@ -9,22 +9,25 @@ from models.overlay import MotionPreset
 
 
 class MotionEngine:
-    def position_expr(self, x: float, y: float, motion: MotionPreset, duration: float) -> tuple[str, str, str]:
+    def position_expr(self, x: float, y: float, motion: MotionPreset, start: float, end: float) -> tuple[str, str, str]:
         base_x = f"(W-w)*{x:.4f}"
         base_y = f"(H-h)*{y:.4f}"
-        enable = f"between(t,0,{duration:.3f})"
+        start = max(0.0, float(start))
+        end = max(start + 0.1, float(end))
+        enable = f"between(t,{start:.3f},{end:.3f})"
+        local_t = f"(t-{start:.3f})"
         if motion == MotionPreset.SLIDE:
-            return f"{base_x}-w*(1-min(t/0.35\\,1))", base_y, enable
+            return f"{base_x}-w*(1-min({local_t}/0.35\\,1))", base_y, enable
         if motion == MotionPreset.SLIDE_UP:
-            return base_x, f"{base_y}+h*(1-min(t/0.35\\,1))", enable
+            return base_x, f"{base_y}+h*(1-min({local_t}/0.35\\,1))", enable
         if motion == MotionPreset.SLIDE_DOWN:
-            return base_x, f"{base_y}-h*(1-min(t/0.35\\,1))", enable
+            return base_x, f"{base_y}-h*(1-min({local_t}/0.35\\,1))", enable
         if motion == MotionPreset.BOUNCE:
-            return base_x, f"{base_y}+18*sin(18*t)*exp(-2*t)", enable
+            return base_x, f"{base_y}+18*sin(18*{local_t})*exp(-2*{local_t})", enable
         if motion == MotionPreset.DRIFT:
-            return f"{base_x}+18*sin(t*0.8)", f"{base_y}+10*cos(t*0.6)", enable
+            return f"{base_x}+18*sin({local_t}*0.8)", f"{base_y}+10*cos({local_t}*0.6)", enable
         if motion == MotionPreset.ELASTIC:
-            return base_x, f"{base_y}+28*sin(22*t)*exp(-3*t)", enable
+            return base_x, f"{base_y}+28*sin(22*{local_t})*exp(-3*{local_t})", enable
         return base_x, base_y, enable
 
     def alpha_expr(self, motion: MotionPreset, duration: float) -> str:

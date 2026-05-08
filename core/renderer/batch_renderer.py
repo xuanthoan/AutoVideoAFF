@@ -104,12 +104,19 @@ class BatchRenderer:
 
 
     def _state_for_video(self, state: ProjectState) -> ProjectState:
-        if state.overlays.text.template != TemplateManager.RANDOM_TEMPLATE_NAME:
+        random_texts = [
+            overlay
+            for overlay in state.overlays.text_overlays()
+            if overlay.template == TemplateManager.RANDOM_TEMPLATE_NAME
+        ]
+        if not random_texts:
             return state
         render_state = copy.deepcopy(state)
-        selected = self.template_manager.random_name(self._last_random_template)
-        self._last_random_template = selected
-        render_state.overlays.text.template = selected
+        for overlay in render_state.overlays.text_overlays():
+            if overlay.template == TemplateManager.RANDOM_TEMPLATE_NAME:
+                selected = self.template_manager.random_name(self._last_random_template)
+                self._last_random_template = selected
+                overlay.template = selected
         return render_state
 
     def _extract_original_audio(self, video: Path, audio_output: Path, log: LogCallback | None) -> Path | None:

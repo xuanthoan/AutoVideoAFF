@@ -75,3 +75,11 @@ Output files are written with absolute paths under the app's `output/` directory
 - Render, Stop, and Open Output Folder buttons are fixed below the scrollable workflow controls so they remain visible while editing.
 - The template dropdown includes `Random Template`; batch rendering chooses a built-in template per video and avoids immediate repeats.
 - Text and sticker edits update directly on the preview canvas from clean source assets without recursive framebuffer rendering.
+
+## Mini Timeline Mode
+
+- A compact 120-180px Mini Timeline sits below the preview canvas and controls only overlay timing: text, stickers, playhead scrubbing, visibility windows, and simple motion timing.
+- Timeline blocks are deliberately lightweight: text blocks are orange, sticker blocks are blue, and selected blocks use a highlighted border. Blocks can be dragged horizontally, resized from either edge, and selected from either the timeline or compact overlay list.
+- Each overlay stores `start_time`, `end_time`, and derived `duration`; new text and sticker overlays default to `0 → video_duration` when a source duration is available.
+- Preview redraws are lightweight and synchronized with the playhead, so overlays are visible only while the current time is inside their timing window.
+- Final export remains FFmpeg-based; overlay filters use `enable='between(t,start,end)'` timing expressions instead of realtime encoding or NLE-style timeline rendering.

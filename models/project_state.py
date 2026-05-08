@@ -51,10 +51,24 @@ class OverlaySettings:
     sticker_enabled: bool = False
     text: TextOverlay = field(default_factory=TextOverlay)
     sticker: StickerOverlay = field(default_factory=StickerOverlay)
+    text_layers: list[TextOverlay] = field(default_factory=list)
+    sticker_layers: list[StickerOverlay] = field(default_factory=list)
+
+    def text_overlays(self) -> list[TextOverlay]:
+        layers = [overlay for overlay in self.text_layers if overlay.active]
+        if self.text_enabled and self.text.active and self.text not in layers:
+            layers.insert(0, self.text)
+        return layers[:20]
+
+    def sticker_overlays(self) -> list[StickerOverlay]:
+        layers = [overlay for overlay in self.sticker_layers if overlay.active]
+        if self.sticker_enabled and self.sticker.active and self.sticker not in layers:
+            layers.insert(0, self.sticker)
+        return layers[:20]
 
     @property
     def enabled(self) -> bool:
-        return (self.text_enabled and self.text.active) or (self.sticker_enabled and self.sticker.active)
+        return bool(self.text_overlays() or self.sticker_overlays())
 
 
 @dataclass(slots=True)

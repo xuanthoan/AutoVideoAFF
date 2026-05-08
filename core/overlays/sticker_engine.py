@@ -10,12 +10,12 @@ class StickerEngine:
     def __init__(self) -> None:
         self.motion = MotionEngine()
 
-    def build_filter(self, video_label: str, sticker_label: str, overlay: StickerOverlay) -> tuple[str, str]:
-        out = "sticker_v"
-        prepared = "sticker_src"
-        x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.duration)
+    def build_filter(self, video_label: str, sticker_label: str, overlay: StickerOverlay, suffix: str = "") -> tuple[str, str]:
+        out = f"sticker_v{suffix}"
+        prepared = f"sticker_src{suffix}"
+        x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time)
         width_expr, height_expr = self.motion.sticker_scale_expr(overlay.scale, overlay.motion)
-        fade_filter = self._fade_filter(overlay.motion, overlay.duration)
+        fade_filter = self._fade_filter(overlay)
         chain = (
             f"[{sticker_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame,"
             f"rotate={overlay.rotation:.4f}*PI/180:ow=rotw(iw):oh=roth(ih):c=none,format=rgba"
@@ -25,9 +25,9 @@ class StickerEngine:
         return chain, out
 
     @staticmethod
-    def _fade_filter(motion: MotionPreset, duration: float) -> str:
-        if motion in {MotionPreset.FADE, MotionPreset.FADE_IN}:
-            return ",fade=t=in:st=0:d=0.35:alpha=1"
-        if motion == MotionPreset.FADE_OUT:
-            return f",fade=t=out:st={max(duration - 0.35, 0):.3f}:d=0.35:alpha=1"
+    def _fade_filter(overlay: StickerOverlay) -> str:
+        if overlay.motion in {MotionPreset.FADE, MotionPreset.FADE_IN}:
+            return f",fade=t=in:st={overlay.start_time:.3f}:d=0.35:alpha=1"
+        if overlay.motion == MotionPreset.FADE_OUT:
+            return f",fade=t=out:st={max(overlay.end_time - 0.35, overlay.start_time):.3f}:d=0.35:alpha=1"
         return ""

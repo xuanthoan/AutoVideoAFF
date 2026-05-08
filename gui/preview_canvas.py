@@ -33,9 +33,10 @@ if QLabel:
             self._safe_area_enabled = True
             self._snap_enabled = True
             self._template_manager = TemplateManager()
+            self._current_time = 0.0
             self._overlays = {
-                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96},
-                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 1.0, "rotation": 0.0},
+                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "start": 0.0, "end": 3.0},
+                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 1.0, "rotation": 0.0, "start": 0.0, "end": 3.0},
             }
             self._drag_kind: str | None = None
 
@@ -69,6 +70,16 @@ if QLabel:
                 data["path"] = path
             data.update({"pixmap": pixmap, "scale": scale, "rotation": rotation, "active": active and pixmap is not None and not pixmap.isNull()})
             self.update()
+
+        def set_playhead_time(self, time_seconds: float) -> None:
+            self._current_time = max(0.0, float(time_seconds))
+            self.update()
+
+        def set_overlay_timing(self, kind: str, start: float, end: float) -> None:
+            if kind in self._overlays:
+                self._overlays[kind]["start"] = max(0.0, float(start))
+                self._overlays[kind]["end"] = max(float(end), float(start) + 0.1)
+                self.update()
 
         def set_overlay_active(self, kind: str, active: bool) -> None:
             if kind in self._overlays:
@@ -145,7 +156,7 @@ if QLabel:
 
         def _draw_text_overlay(self, painter: QPainter) -> None:
             data = self._overlays["text"]
-            if not data["active"] or not str(data["text"]).strip():
+            if not self._overlay_visible(data) or not str(data["text"]).strip():
                 return
             template = self._template_manager.get(str(data["template"]))
             rect = self._overlay_rect("text")
@@ -168,7 +179,7 @@ if QLabel:
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]
             pixmap = data.get("pixmap")
-            if not data["active"] or pixmap is None or pixmap.isNull():
+            if not self._overlay_visible(data) or pixmap is None or pixmap.isNull():
                 return
             rect = self._overlay_rect("sticker")
             base = min(180, max(42, 120 * float(data["scale"])))
@@ -194,6 +205,9 @@ if QLabel:
             painter.setPen(QPen(QColor(255, 90, 90, 70), 1, Qt.DotLine))
             for zone in self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform).ui_exclusion_zones:
                 painter.drawRect(self._rect_from_normalized(zone))
+
+        def _overlay_visible(self, data: dict) -> bool:
+            return bool(data["active"]) and float(data.get("start", 0.0)) <= self._current_time <= float(data.get("end", 0.0))
 
         def _overlay_rect(self, kind: str) -> QRectF:
             data = self._overlays[kind]

@@ -36,9 +36,23 @@ class OverlayBase:
     enabled: bool = True
     x: float = 0.5
     y: float = 0.5
-    duration: float = 3.0
     start_time: float = 0.0
+    end_time: float = 3.0
+    duration: float = 3.0
     motion: MotionPreset = MotionPreset.NONE
+
+    def set_timing(self, start_time: float, end_time: float) -> None:
+        """Store a compact timeline timing range and derived duration."""
+        self.start_time = max(0.0, float(start_time))
+        self.end_time = max(self.start_time + 0.1, float(end_time))
+        self.duration = self.end_time - self.start_time
+
+    def set_full_duration(self, video_duration: float) -> None:
+        """Default newly created overlays to the whole source duration."""
+        self.set_timing(0.0, max(0.1, float(video_duration)))
+
+    def active_at(self, current_time: float) -> bool:
+        return self.enabled and self.start_time <= current_time <= self.end_time
 
     def clamp_to_safe_area(self, width: int, height: int) -> None:
         left = width * 0.05

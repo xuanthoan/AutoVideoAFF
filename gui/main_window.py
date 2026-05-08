@@ -14,12 +14,14 @@ except ImportError:
 
 from core.renderer.batch_renderer import BatchRenderer
 from core.renderer.preview_renderer import PreviewRenderer
+from gui.mini_timeline import MiniTimeline, TimelineOverlayItem
 from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
 from models.overlay import MotionPreset
 from models.project_state import ProjectState, WorkflowMode
 from models.sticker_overlay import StickerOverlay
+from utils.ffmpeg_helper import FFmpegNotFoundError, probe_duration
 from utils.file_helper import output_directory
 
 
@@ -58,6 +60,8 @@ if QMainWindow:
             self.state = ProjectState()
             self.queue = QueuePanel()
             self.preview = PreviewCanvas()
+            self.timeline = MiniTimeline()
+            self.video_duration = 6.0
             self.workflow = WorkflowPanel()
             self.export_button = QPushButton(self.state.render_count_label())
             self.stop_button = QPushButton("Stop")
@@ -103,14 +107,21 @@ if QMainWindow:
             right_column_layout.addWidget(self.stop_button)
             right_column_layout.addWidget(self.open_output_button)
 
+            center_column = QWidget()
+            center_layout = QVBoxLayout(center_column)
+            center_layout.setContentsMargins(0, 0, 0, 0)
+            center_layout.setSpacing(6)
+            center_layout.addWidget(self.preview, 1)
+            center_layout.addWidget(self.timeline, 0)
+
             layout.addWidget(left_splitter, 0)
-            layout.addWidget(self.preview, 1)
+            layout.addWidget(center_column, 1)
             layout.addWidget(right_column, 0)
             self.setCentralWidget(root)
 
         def _wire(self) -> None:
             self.queue.changed.connect(self.set_videos)
-            self.queue.currentPathChanged.connect(lambda path: self.update_preview(Path(path)))
+            self.queue.currentPathChanged.connect(lambda path: (self.set_video_duration(Path(path)), self.update_preview(Path(path))))
             self.workflow.imagePoolSelected.connect(self.set_image_pool)
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
@@ -120,6 +131,10 @@ if QMainWindow:
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.overlayMoved.connect(self.set_overlay_position)
+            self.timeline.playheadChanged.connect(self.set_playhead_time)
+            self.timeline.overlayTimingChanged.connect(self.set_overlay_timing)
+            self.timeline.overlaySelected.connect(self.select_overlay)
+            self.timeline.overlayVisibilityChanged.connect(self.set_overlay_visibility)
             self.export_button.clicked.connect(self.render)
             self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
@@ -148,7 +163,11 @@ if QMainWindow:
             self.export_button.setText(self.state.render_count_label())
             self.append_log(f"[INFO] Loading videos: {len(paths)} video")
             if paths:
+                self.set_video_duration(paths[0])
                 self.update_preview(paths[0])
+            else:
+                self.video_duration = 6.0
+                self.timeline.set_duration(self.video_duration)
 
         def set_image_pool(self, paths: list[Path]) -> None:
             self.state.image_composite.image_pool = paths
@@ -158,6 +177,7 @@ if QMainWindow:
 
         def set_sticker(self, path: str) -> None:
             self.state.overlays.sticker = StickerOverlay(path=Path(path))
+            self.state.overlays.sticker.set_full_duration(self.video_duration)
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),
@@ -165,6 +185,7 @@ if QMainWindow:
             )
             self.state.overlays.sticker_enabled = True
             self.update_sticker_preview()
+            self.refresh_timeline()
             self.append_log(f"[INFO] Đã chọn sticker: {Path(path).name}")
 
         def set_sticker_controls(self, scale: float, rotation: float, motion: str) -> None:
@@ -194,6 +215,7 @@ if QMainWindow:
                 self.state.overlays.text.font_size,
                 active,
             )
+            self.preview.set_overlay_timing("text", self.state.overlays.text.start_time, self.state.overlays.text.end_time)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
 
         def update_sticker_preview(self) -> None:
@@ -205,14 +227,102 @@ if QMainWindow:
                 self.state.overlays.sticker.rotation,
                 active,
             )
+            self.preview.set_overlay_timing("sticker", self.state.overlays.sticker.start_time, self.state.overlays.sticker.end_time)
             self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
 
+        def set_playhead_time(self, time_seconds: float) -> None:
+            self.timeline.set_playhead_time(time_seconds)
+            self.preview.set_playhead_time(time_seconds)
+            self.update_text_preview()
+            self.update_sticker_preview()
+
+        def set_overlay_timing(self, key: str, start: float, end: float) -> None:
+            overlay = self._overlay_by_key(key)
+            if overlay is None:
+                return
+            overlay.set_timing(start, end)
+            self.preview.set_overlay_timing(key, start, end)
+            self.refresh_timeline()
+            self.update_text_preview()
+            self.update_sticker_preview()
+
+        def select_overlay(self, key: str) -> None:
+            if key == "text":
+                self.workflow.text.setFocus()
+            elif key == "sticker":
+                self.workflow.sticker_scale.setFocus()
+            self.status.showMessage(f"Selected overlay: {key}")
+
+        def set_overlay_visibility(self, key: str, visible: bool) -> None:
+            overlay = self._overlay_by_key(key)
+            if overlay is None:
+                return
+            overlay.enabled = visible
+            if key == "text":
+                self.state.overlays.text_enabled = visible and self.state.overlays.text.active
+            elif key == "sticker":
+                self.state.overlays.sticker_enabled = visible and self.state.overlays.sticker.active
+            self.update_text_preview()
+            self.update_sticker_preview()
+            self.refresh_timeline()
+
+        def _overlay_by_key(self, key: str):
+            if key == "text":
+                return self.state.overlays.text
+            if key == "sticker":
+                return self.state.overlays.sticker
+            return None
+
+        def refresh_timeline(self) -> None:
+            items: list[TimelineOverlayItem] = []
+            if self.state.overlays.text.text.strip():
+                items.append(
+                    TimelineOverlayItem(
+                        "text",
+                        "text",
+                        "Text 1",
+                        self.state.overlays.text.start_time,
+                        self.state.overlays.text.end_time,
+                        self.state.overlays.text.enabled,
+                    )
+                )
+            if self.state.overlays.sticker.path is not None:
+                items.append(
+                    TimelineOverlayItem(
+                        "sticker",
+                        "sticker",
+                        "Sticker 1",
+                        self.state.overlays.sticker.start_time,
+                        self.state.overlays.sticker.end_time,
+                        self.state.overlays.sticker.enabled,
+                    )
+                )
+            self.timeline.set_duration(self.video_duration)
+            self.timeline.set_items(items)
+
         def set_text(self, text: str) -> None:
+            was_inactive = not self.state.overlays.text.active
             self.state.overlays.text.text = text
+            if was_inactive and text.strip():
+                self.state.overlays.text.set_full_duration(self.video_duration)
             active = bool(text.strip())
             self.state.overlays.text_enabled = active
             self.update_text_preview()
+            self.refresh_timeline()
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
+
+        def set_video_duration(self, video_path: Path) -> None:
+            try:
+                self.video_duration = max(0.1, probe_duration(video_path))
+            except (FFmpegNotFoundError, KeyError, ValueError, OSError) as exc:
+                self.video_duration = 6.0
+                self.append_log(f"[WARNING] Không đọc được duration, dùng timeline 6s: {exc}")
+            self.timeline.set_duration(self.video_duration)
+            if not self.state.overlays.text.text.strip():
+                self.state.overlays.text.set_full_duration(self.video_duration)
+            if self.state.overlays.sticker.path is None:
+                self.state.overlays.sticker.set_full_duration(self.video_duration)
+            self.refresh_timeline()
 
         def update_preview(self, video_path: Path) -> None:
             if not video_path.exists():
