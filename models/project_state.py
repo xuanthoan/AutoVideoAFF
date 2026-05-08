@@ -78,6 +78,7 @@ class ExportSettings:
     crf: int = 18
     preset: str = "veryfast"
     auto_open_output: bool = False
+    developer_mode: bool = False
 
 
 @dataclass(slots=True)

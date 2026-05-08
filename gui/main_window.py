@@ -214,6 +214,7 @@ if QMainWindow:
                 self.state.overlays.text.template,
                 self.state.overlays.text.font_size,
                 active,
+                self.state.overlays.text.motion.value,
             )
             self.preview.set_overlay_timing("text", self.state.overlays.text.start_time, self.state.overlays.text.end_time)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
@@ -226,6 +227,7 @@ if QMainWindow:
                 self.state.overlays.sticker.scale,
                 self.state.overlays.sticker.rotation,
                 active,
+                self.state.overlays.sticker.motion.value,
             )
             self.preview.set_overlay_timing("sticker", self.state.overlays.sticker.start_time, self.state.overlays.sticker.end_time)
             self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)

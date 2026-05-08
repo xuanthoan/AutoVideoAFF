@@ -25,8 +25,14 @@ class TextEngine:
         suffix: str = "",
     ) -> tuple[str, str]:
         out = f"text_v{suffix}"
+        prepared = f"text_src{suffix}"
         x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time)
-        chain = f"[{video_label}][{text_label}]overlay=x={x}:y={y}:enable='{enable}'[{out}]"
+        width_expr, height_expr = self.motion.region_scale_expr("iw", overlay.motion, overlay.start_time)
+        alpha_filter = self.motion.alpha_filter(overlay.motion, overlay.start_time, overlay.end_time)
+        chain = (
+            f"[{text_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame{alpha_filter}[{prepared}];"
+            f"[{video_label}][{prepared}]overlay=x={x}:y={y}:enable='{enable}'[{out}]"
+        )
         return chain, out
 
     def render_asset(

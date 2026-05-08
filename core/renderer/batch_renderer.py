@@ -82,8 +82,9 @@ class BatchRenderer:
                 render_state = self._state_for_video(state)
                 cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
                 self._log_debug_events(log)
-                self._write_debug_filtergraph(cmd, output, log)
-                self._write_debug_fade_filter(cmd, output, log)
+                if render_state.export.developer_mode:
+                    self._write_debug_filtergraph(cmd, output, log)
+                    self._write_debug_fade_filter(cmd, output, log)
                 self._log(log, "INFO", "FFmpeg command: " + self._format_command(cmd))
                 self._run_command(cmd, log)
                 self._verify_output(temp_output, log)
