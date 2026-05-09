@@ -268,3 +268,12 @@ When modifying the app:
 - Keep timeline overlay-only and lightweight.
 - Keep text assets minimal-region PNGs, not full-frame RGBA sequences.
 - Add tests for generated filter strings whenever renderer logic changes.
+
+## 17. Motion Engine Update — 2026-05-09
+
+Overlay motion now follows a stricter two-stage model:
+
+1. Render or load an immutable RGBA overlay region.
+2. Apply alpha, scale, translation, and rotation motion to that region during final-canvas compositing.
+
+The shared `MotionEngine` is the source of truth for FFmpeg expressions and preview helper calculations. Text and sticker overlays should not implement separate ad-hoc motion formulas.

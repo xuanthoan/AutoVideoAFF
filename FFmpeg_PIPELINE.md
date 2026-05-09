@@ -296,3 +296,27 @@ Before committing FFmpeg changes:
 - confirm `debug_*.txt` files only appear in developer mode;
 - run `python -m compileall core gui models utils main.py`;
 - add focused Python assertions for generated filtergraph strings.
+
+## 2026-05-09 Overlay Motion Filter Notes
+
+Overlay motion filters now follow this shape:
+
+```text
+[overlay_input]
+scale=w='<dynamic_width>':h='<dynamic_height>':eval=frame,
+format=rgba,
+fade=t=in|out:st=<time>:d=<duration>:alpha=1
+[prepared_overlay]
+
+[base][prepared_overlay]
+overlay=x=<dynamic_x>:y=<dynamic_y>:enable='between(t,start,end)'
+[out]
+```
+
+Sticker overlays may also include dynamic `rotate='<expr>'` before alpha preparation.
+
+Important:
+
+- Keep `eval=frame` for dynamic scale expressions.
+- Keep overlays as minimal regions, not full-frame sequences.
+- Escape expression commas when embedding `if()`, `min()`, or `max()` expressions inside FFmpeg filter options.

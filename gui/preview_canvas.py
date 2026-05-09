@@ -183,7 +183,11 @@ if QLabel:
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
             transformed, alpha = self._preview_transform(data, pixmap)
-            center = QPointF(canvas.left() + float(data["x"]) * canvas.width(), canvas.top() + float(data["y"]) * canvas.height())
+            dx, dy = self._preview_offset(data, transformed, canvas)
+            center = QPointF(
+                canvas.left() + float(data["x"]) * canvas.width() + dx,
+                canvas.top() + float(data["y"]) * canvas.height() + dy,
+            )
             painter.save()
             painter.setOpacity(alpha)
             painter.drawPixmap(QPointF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2), transformed)
@@ -206,10 +210,12 @@ if QLabel:
             data["w"] = scaled.width()
             data["h"] = scaled.height()
             rect = self._overlay_rect("sticker")
+            dx, dy = self._preview_offset(data, scaled, canvas)
+            rotation_delta = self._preview_rotation_delta(data)
             painter.save()
-            center = rect.center()
+            center = QPointF(rect.center().x() + dx, rect.center().y() + dy)
             painter.translate(center)
-            painter.rotate(float(data["rotation"]))
+            painter.rotate(float(data["rotation"]) + rotation_delta)
             painter.setOpacity(alpha)
             painter.drawPixmap(QPointF(-scaled.width() / 2, -scaled.height() / 2), scaled)
             painter.restore()
@@ -234,8 +240,9 @@ if QLabel:
             start = float(data.get("start", 0.0))
             end = float(data.get("end", start))
             local_t = max(0.0, self._current_time - start)
-            alpha = self._motion_engine.preview_alpha(motion, local_t, max(end - start, 0.0))
-            scale = self._motion_engine.preview_scale(motion, local_t)
+            duration = max(end - start, 0.0)
+            alpha = self._motion_engine.preview_alpha(motion, local_t, duration)
+            scale = self._motion_engine.preview_scale(motion, local_t, duration)
             if abs(scale - 1.0) < 0.001:
                 return pixmap, alpha
             return pixmap.scaled(
@@ -244,6 +251,27 @@ if QLabel:
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation,
             ), alpha
+
+        def _preview_offset(self, data: dict, pixmap: QPixmap, canvas: QRectF) -> tuple[float, float]:
+            motion = str(data.get("motion", "None"))
+            start = float(data.get("start", 0.0))
+            local_t = max(0.0, self._current_time - start)
+            return self._motion_engine.preview_offset(
+                motion,
+                local_t,
+                canvas.width(),
+                canvas.height(),
+                pixmap.width(),
+                pixmap.height(),
+                float(data.get("x", 0.5)),
+                float(data.get("y", 0.5)),
+            )
+
+        def _preview_rotation_delta(self, data: dict) -> float:
+            motion = str(data.get("motion", "None"))
+            start = float(data.get("start", 0.0))
+            local_t = max(0.0, self._current_time - start)
+            return self._motion_engine.preview_rotation_delta(motion, local_t)
 
         def _overlay_visible(self, data: dict) -> bool:
             return bool(data["active"]) and float(data.get("start", 0.0)) <= self._current_time <= float(data.get("end", 0.0))

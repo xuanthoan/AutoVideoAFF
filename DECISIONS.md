@@ -242,3 +242,14 @@ Current key docs:
 - `TESTING.md`
 - `KNOWN_ISSUES.md`
 - `FILE_STRUCTURE.md`
+
+## 18. Motion Engine Source of Truth
+
+Decision: `core/overlays/motion_engine.py` is the shared source of truth for overlay motion in both preview and export.
+
+Rules:
+
+- Text and sticker engines should call `MotionEngine` instead of duplicating expressions.
+- Preview canvas should call `MotionEngine` helper methods instead of hardcoding separate animation math.
+- Animated scale must use region transforms, not regenerated PNG assets.
+- Fade must animate RGBA overlay alpha after asset creation.

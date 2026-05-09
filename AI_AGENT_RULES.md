@@ -160,3 +160,16 @@ For this environment:
 - Commit changes on the current branch.
 - Create a PR record after committing.
 - Do not create a PR if no code/docs changed.
+
+## 14. Overlay Motion Patch Rules
+
+After the 2026-05-09 motion patch, text and sticker motion must continue to use the shared `MotionEngine`.
+
+Rules:
+
+- Add new motion presets to `models.overlay.MotionPreset` first.
+- Add matching FFmpeg and preview behavior in `core/overlays/motion_engine.py`.
+- Apply motion after immutable RGBA overlay asset creation.
+- Keep scale animation in FFmpeg `scale=...:eval=frame`.
+- Keep fade as alpha animation on RGBA overlay streams.
+- Keep preview transforms routed through the same motion helper formulas.

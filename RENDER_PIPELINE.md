@@ -286,3 +286,17 @@ Before modifying renderer logic, verify:
 - output folder remains first-input-folder/output;
 - `python -m compileall core gui models utils main.py` passes;
 - filter-string unit checks cover new graph behavior.
+
+## 16. Overlay Motion Stage Update — 2026-05-09
+
+Overlay motion is now explicitly part of the overlay stage, after text/sticker asset creation and before final overlay compositing.
+
+Expected filter order for each overlay region:
+
+1. Load or render immutable RGBA region.
+2. Scale dynamically with `eval=frame` when motion requires it.
+3. Rotate dynamically for sticker rotate-float when requested.
+4. Apply RGBA alpha fade if requested.
+5. Overlay onto the current final-canvas label with timing `enable='between(t,start,end)'`.
+
+This keeps motion lightweight and avoids full-frame RGBA animation sequences.

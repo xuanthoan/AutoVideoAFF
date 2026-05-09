@@ -49,7 +49,7 @@ This file records known bugs, suspected causes, and suggested fix direction for 
 
 ### 2. Overlay animation engine is incomplete / broken for Fade, Pop, Scale
 
-**Status:** Known critical bug / not fully fixed.
+**Status:** First implementation patch added / requires real FFmpeg validation.
 
 **User-reported symptoms:**
 
@@ -67,12 +67,13 @@ This file records known bugs, suspected causes, and suggested fix direction for 
 - `models/overlay.py`
 - `gui/workflow_panel.py`
 
-**Current code risk:**
+**Current code status:**
 
-- Motion enum does not include all requested presets (Float, Shake, Slide Left/Right, Pulse, Rotate Float, Scale Up/Down).
-- `MotionEngine.alpha_filter()` applies FFmpeg `fade` filters to PNG/video overlay source, but this may not preserve original alpha correctly for stickers.
-- Dynamic scale expressions use `scale=...:eval=frame`, but final positioning may not compensate for changing region size in every motion mode.
-- Preview and export share some helper functions but are not guaranteed equivalent for every preset.
+- Motion enum now includes the requested common presets (Float, Shake, Slide Left/Right, Pulse, Rotate Float, Scale Up/Down).
+- `MotionEngine.alpha_filter()` applies FFmpeg RGBA alpha fades after asset creation.
+- Dynamic scale expressions use `scale=...:eval=frame` and are shared by text/sticker engines.
+- Preview uses `MotionEngine` helper methods for alpha, scale, offset, and rotate-float behavior.
+- Real FFmpeg render validation is still required for every preset.
 
 **Required fix direction:**
 
@@ -350,3 +351,18 @@ rg "-map|original_audio|audio_label|c:a|probe" core/renderer core/pipeline utils
 ```bash
 rg "MotionPreset|alpha_filter|region_scale_expr|eval=frame" core/overlays gui models -n
 ```
+
+## Recently Addressed — Overlay Motion Patch 2026-05-09
+
+The Fade/Pop/Scale motion bug has been partially addressed in code:
+
+- `MotionPreset` now includes the requested common social motion presets.
+- `MotionEngine` builds alpha fades and dynamic scale/position expressions for overlay regions.
+- Text and sticker engines pass overlay start/end timing into dynamic region scaling.
+- Preview canvas now applies matching alpha, scale, offset, and rotate-float helpers.
+
+Remaining validation required:
+
+- Run real FFmpeg renders for text/sticker Fade In, Fade Out, Pop, Scale, Pulse, Float, Shake, and slides.
+- Confirm sticker Fade In preserves transparent PNG edges and does not disappear.
+- Confirm preview/output parity visually on Windows.

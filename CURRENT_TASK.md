@@ -11,7 +11,7 @@ The project currently has a working architecture scaffold, but it is not product
 Immediate priority order:
 
 1. Fix no-audio input handling so videos without audio render without freeze/hang.
-2. Fix overlay animation engine, especially Fade, Fade In, Pop, and Scale for both text and stickers.
+2. Validate and harden the newly patched overlay animation engine, especially Fade, Fade In, Pop, and Scale for both text and stickers.
 3. Verify and harden Pipeline 4 (Overlay Only) on both with-audio and no-audio videos.
 4. Verify image compositor overlap fade on real 9:16 media.
 5. Add focused command-generation tests before adding new UI features.
@@ -65,7 +65,7 @@ If source video has no audio:
 
 ### Problem
 
-Some motion presets exist in the UI/model but do not translate reliably into FFmpeg expressions. User-reported symptoms include:
+A first implementation pass now translates motion presets into shared FFmpeg/preview expressions. Real render validation is still required because user-reported symptoms included:
 
 - Text Fade does not work.
 - Sticker Fade In can make sticker disappear.
@@ -85,7 +85,7 @@ Some motion presets exist in the UI/model but do not translate reliably into FFm
 - Expand `MotionEngine` into a single source of truth for export and preview formulas.
 - Use per-frame evaluation for dynamic transforms.
 - Verify scale expressions include `eval=frame`.
-- Make Pop obvious: roughly `0.85 -> 1.12 -> 1.00` over a short duration.
+- Make Pop obvious: roughly `0.80 -> 1.20 -> 1.00` over a short duration.
 - Add tests that inspect generated filtergraph strings for fade, pop, and scale behavior.
 
 ## 5. Required Fix 3 — Pipeline 4 Overlay Only
@@ -169,3 +169,19 @@ For fade:
 - Keep sticker scale canvas-width-relative.
 - Keep output folder beside the first queued input video.
 - Keep safe area and snap enabled internally by default.
+
+## 10. Update After Motion Patch — 2026-05-09
+
+The first code pass for the overlay animation engine has been implemented.
+
+What changed:
+
+- `MotionPreset` includes more social motion presets.
+- `MotionEngine` now owns shared FFmpeg/preview formulas.
+- Text/sticker engines apply motion after overlay asset creation.
+- Preview canvas applies matching alpha/scale/offset/rotate-float helpers.
+
+Next task:
+
+- Validate the new motion filters with real FFmpeg renders.
+- Fix optional no-audio command handling next; it remains the highest unresolved runtime bug.

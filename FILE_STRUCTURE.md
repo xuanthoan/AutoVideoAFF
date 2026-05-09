@@ -294,3 +294,14 @@ Expected location for bundled FFmpeg binaries in local/dev/distribution builds:
 - `ffprobe.exe`
 
 This directory may not be committed depending on binary distribution policy.
+
+## Motion Patch File Responsibilities
+
+The 2026-05-09 motion patch makes these files especially important:
+
+- `models/overlay.py`: canonical list of motion presets.
+- `core/overlays/motion_engine.py`: shared FFmpeg and preview motion formulas.
+- `core/overlays/text_engine.py`: applies dynamic motion to Qt-rendered text regions.
+- `core/overlays/sticker_engine.py`: applies dynamic motion to sticker regions, including rotate-float.
+- `gui/preview_canvas.py`: live preview alpha/scale/offset/rotation using `MotionEngine`.
+- `gui/workflow_panel.py`: exposes the available motion presets in text/sticker dropdowns.

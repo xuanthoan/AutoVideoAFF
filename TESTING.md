@@ -238,3 +238,15 @@ Before calling the app production-ready, all must pass:
 - output folder correctness with multi-folder input queue;
 - stop button kills active FFmpeg process;
 - clean Windows machine font/FFmpeg bundle test.
+
+## 8. Motion Patch Tests Added/Required
+
+A command-level smoke test should assert:
+
+- Pop scale expressions contain `0.80`, `1.20`, local time, and escaped FFmpeg expression commas.
+- Fade In filter contains `format=rgba` and `fade=t=in:st=<start>:d=0.350:alpha=1`.
+- Fade Out starts at `end - 0.350`.
+- Text filters use `scale=...:eval=frame` and do not use `drawtext`.
+- Sticker Rotate Float uses a dynamic `rotate='<expr>'` expression.
+
+Manual render validation is still required for visual quality and preview/output parity.

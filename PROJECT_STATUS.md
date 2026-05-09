@@ -134,7 +134,7 @@ Current project status is best described as:
 - GUI workflow: mostly in place.
 - Static overlays: partially working / needs real-media verification.
 - Image compositor/fade: recently patched / needs real-media verification.
-- Motion effects: known broken/incomplete.
+- Motion effects: first implementation patch added; needs real-render validation.
 - Audio handling: known critical risk for no-audio inputs.
 - Production readiness: not ready until known bugs are fixed and tested on real videos.
 
@@ -165,3 +165,13 @@ Current project status is best described as:
 - Keep all overlays in normalized final-canvas space.
 - Keep text as minimal Qt-rendered RGBA region assets.
 - Keep single final encode; no temp MP4 stages.
+
+## 7. Update — Overlay Motion Patch 2026-05-09
+
+A first implementation pass for overlay motion has been added.
+
+Status changes:
+
+- Motion architecture: improved but needs real FFmpeg render validation.
+- Fade/Pop/Scale: command-generation behavior improved; visual QA still required.
+- No-audio handling: still open and should remain the next highest priority.

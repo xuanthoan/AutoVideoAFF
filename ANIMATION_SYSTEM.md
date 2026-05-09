@@ -321,3 +321,20 @@ When changing motion:
 - ensure `eval=frame` remains on dynamic scale filters;
 - ensure overlay input is immutable and transformed once per frame;
 - avoid full-frame RGBA overlay generation.
+
+## 2026-05-09 Motion Engine Patch
+
+The overlay animation engine now has a shared `OverlayAnimation`/`MotionEngine` path for FFmpeg export and live preview helpers.
+
+Implemented/updated behavior:
+
+- Fade In and Fade Out are applied as alpha fades on RGBA overlay assets after asset creation.
+- Pop uses a visible social-style overshoot scale: approximately `0.80 -> 1.20 -> 1.00` over 0.30s.
+- Bounce uses a softer `0.85 -> 1.08 -> 1.00` scale curve.
+- Scale, Scale Up, Scale Down, Pulse, Float, Shake, Slide Left/Right/Up/Down, and Rotate Float are represented in `MotionPreset`.
+- Dynamic scale filters use `eval=frame`.
+- Preview alpha, scale, offset, and sticker rotate-float delta are calculated through `MotionEngine` to keep preview/export behavior aligned.
+
+Important implementation rule:
+
+- Do not bake animation into generated PNGs. Text/sticker assets remain immutable minimal regions; FFmpeg and preview transforms animate those regions over time.

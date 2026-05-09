@@ -477,3 +477,18 @@ Use these rules when continuing work:
 - Keep safe area/snap internal defaults enabled.
 - Keep output path as first input folder plus `/output`.
 - Add tests whenever changing FFmpeg command construction, image fade math, or motion expressions.
+
+## 18. Motion Patch Update — 2026-05-09
+
+A first pass of the overlay animation fix has been applied:
+
+- More social motion presets were added to `MotionPreset` and GUI dropdowns.
+- `MotionEngine` now centralizes FFmpeg and preview motion formulas.
+- Text and sticker engines apply dynamic scale/alpha/position after immutable asset creation.
+- Preview canvas now applies matching alpha, scale, offset, and rotate-float helpers.
+
+Still required in the next session:
+
+- Real render validation for every motion preset.
+- Visual preview/output parity checks.
+- Optional no-audio command fix remains critical and should be tackled next.

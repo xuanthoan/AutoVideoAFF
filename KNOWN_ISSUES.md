@@ -34,16 +34,22 @@ Acceptance:
 - No-audio videos export video-only MP4 without freeze.
 - With-audio videos export with restored original audio.
 
-### 2. Overlay Motion Fade/Pop/Scale Is Incomplete
+### 2. Overlay Motion Fade/Pop/Scale Needs Validation
 
-Status: open.
+Status: first implementation patch added; real render validation required.
 
-Impact:
+Impact history:
 
-- Text Fade may not work.
-- Sticker Fade In can disappear.
-- Pop may have no visible effect.
-- Text Scale may not animate.
+- Text Fade previously did not work.
+- Sticker Fade In could disappear.
+- Pop previously had little/no visible effect.
+- Text Scale previously did not animate.
+
+Current code path:
+
+- Shared `MotionEngine` now generates fade, scale, position, and rotate-float expressions.
+- Preview canvas now uses matching motion helpers.
+- Needs real FFmpeg output validation.
 
 Likely files:
 
@@ -221,3 +227,16 @@ Best next branch scope:
 4. Add command-level tests for motion filters.
 
 Avoid mixing broad GUI redesign into the same branch.
+
+## Recently Changed — Motion Engine
+
+The Fade/Pop/Scale issue has a first implementation patch, but it still needs media validation.
+
+Validation still required:
+
+- Render text Fade In/Fade Out/Pop/Scale/Pulse.
+- Render sticker Fade In/Fade Out/Pop/Rotate Float/Shake/Slide.
+- Compare preview and output at the same playhead time.
+- Verify transparent sticker edges remain clean during fade.
+
+If failures remain, start with `core/overlays/motion_engine.py` and inspect generated FFmpeg expressions.
