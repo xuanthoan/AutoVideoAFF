@@ -34,7 +34,7 @@ class OverlayTransform:
     @staticmethod
     def scale_ratio_for(overlay: OverlayBase) -> float:
         if isinstance(overlay, StickerOverlay):
-            return min(max(float(overlay.scale), 0.01), 1.0)
+            return overlay.effective_scale_ratio()
         return 0.0
 
     def center_pixels(self, canvas_width: int, canvas_height: int) -> tuple[float, float]:

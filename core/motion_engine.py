@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from math import cos, pi, sin
 
+from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT, REFERENCE_WIDTH
 from models.overlay import MotionPreset
 
 
@@ -40,6 +41,12 @@ class MotionSpec:
     speed: float = 1.0
     strength: float = 1.0
     easing: Easing = Easing.EASE_OUT
+    bounce_amplitude_ratio: float = 24 / REFERENCE_HEIGHT
+    float_x_ratio: float = 18 / REFERENCE_WIDTH
+    float_y_ratio: float = 12 / REFERENCE_HEIGHT
+    shake_x_ratio: float = 8 / REFERENCE_WIDTH
+    shake_y_ratio: float = 6 / REFERENCE_HEIGHT
+    elastic_y_ratio: float = 28 / REFERENCE_HEIGHT
 
     @property
     def duration(self) -> float:
@@ -232,14 +239,21 @@ class MotionEvaluator:
             return 0.0, (canvas_height - base_top) * (1 - slide_p)
         if spec.preset == MotionPreset.SLIDE_DOWN:
             return 0.0, (-overlay_height - base_top) * (1 - slide_p)
+        layout = NormalizedLayoutEngine()
         if spec.preset == MotionPreset.BOUNCE:
-            return 0.0, 24.0 * spec.strength * sin(local_t * 10.0) * pow(2.718281828, -1.8 * local_t)
+            amp_y = layout.denormalize_motion_amplitude(spec.bounce_amplitude_ratio, canvas_height)
+            return 0.0, amp_y * spec.strength * sin(local_t * 10.0) * pow(2.718281828, -1.8 * local_t)
         if spec.preset in {MotionPreset.FLOAT, MotionPreset.DRIFT}:
-            return 18 * spec.strength * sin(local_t * 1.4), 12 * spec.strength * cos(local_t * 1.1)
+            amp_x = layout.denormalize_motion_amplitude(spec.float_x_ratio, canvas_width)
+            amp_y = layout.denormalize_motion_amplitude(spec.float_y_ratio, canvas_height)
+            return amp_x * spec.strength * sin(local_t * 1.4), amp_y * spec.strength * cos(local_t * 1.1)
         if spec.preset == MotionPreset.SHAKE:
-            return 8 * spec.strength * sin(local_t * 42), 6 * spec.strength * cos(local_t * 55)
+            amp_x = layout.denormalize_motion_amplitude(spec.shake_x_ratio, canvas_width)
+            amp_y = layout.denormalize_motion_amplitude(spec.shake_y_ratio, canvas_height)
+            return amp_x * spec.strength * sin(local_t * 42), amp_y * spec.strength * cos(local_t * 55)
         if spec.preset == MotionPreset.ELASTIC:
-            return 0.0, 28 * spec.strength * sin(22 * local_t) * pow(2.718281828, -3 * local_t)
+            amp_y = layout.denormalize_motion_amplitude(spec.elastic_y_ratio, canvas_height)
+            return 0.0, amp_y * spec.strength * sin(22 * local_t) * pow(2.718281828, -3 * local_t)
         return 0.0, 0.0
 
     def rotation_delta_at(self, spec: MotionSpec, local_t: float) -> float:
@@ -354,13 +368,13 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         if spec.preset == MotionPreset.SLIDE_DOWN:
             return base_x, f"-h+(({base_y})+h)*{slide_p}", enable
         if spec.preset == MotionPreset.BOUNCE:
-            return base_x, f"{base_y}+24*{amp}*sin({local_t}*10)*exp(-1.8*{local_t})", enable
+            return base_x, f"{base_y}+H*{spec.bounce_amplitude_ratio:.6f}*{amp}*sin({local_t}*10)*exp(-1.8*{local_t})", enable
         if spec.preset in {MotionPreset.FLOAT, MotionPreset.DRIFT}:
-            return f"{base_x}+18*{amp}*sin({local_t}*1.4)", f"{base_y}+12*{amp}*cos({local_t}*1.1)", enable
+            return f"{base_x}+W*{spec.float_x_ratio:.6f}*{amp}*sin({local_t}*1.4)", f"{base_y}+H*{spec.float_y_ratio:.6f}*{amp}*cos({local_t}*1.1)", enable
         if spec.preset == MotionPreset.SHAKE:
-            return f"{base_x}+8*{amp}*sin({local_t}*42)", f"{base_y}+6*{amp}*cos({local_t}*55)", enable
+            return f"{base_x}+W*{spec.shake_x_ratio:.6f}*{amp}*sin({local_t}*42)", f"{base_y}+H*{spec.shake_y_ratio:.6f}*{amp}*cos({local_t}*55)", enable
         if spec.preset == MotionPreset.ELASTIC:
-            return base_x, f"{base_y}+28*{amp}*sin(22*{local_t})*exp(-3*{local_t})", enable
+            return base_x, f"{base_y}+H*{spec.elastic_y_ratio:.6f}*{amp}*sin(22*{local_t})*exp(-3*{local_t})", enable
         return base_x, base_y, enable
 
     def alpha_filter(
@@ -523,7 +537,7 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         return (
             f"[MOTION] type={spec.preset.value} speed={spec.speed:.2f} strength={spec.strength:.2f} "
             f"duration={spec.duration:.2f} fade_duration={spec.fade_duration / spec.speed:.3f} "
-            f"expression=scale:{scale_expr}"
+            f"motion_amplitude_ratio={spec.bounce_amplitude_ratio:.6f} expression=scale:{scale_expr}"
         )
 
 

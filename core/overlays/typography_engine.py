@@ -6,10 +6,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
 from core.overlays.template_manager import TextTemplate
 from utils.ffmpeg_helper import app_root
 
-REFERENCE_HEIGHT = 1920
 
 try:
     from PySide6.QtCore import QRectF, Qt
@@ -29,11 +29,14 @@ class TypographyStyle:
 
 
 class TypographyEngine:
+    def __init__(self) -> None:
+        self.layout = NormalizedLayoutEngine()
+
     def scale_factor(self, video_height: int) -> float:
         return video_height / REFERENCE_HEIGHT
 
     def scale(self, value: float, video_height: int) -> int:
-        return round(value * self.scale_factor(video_height))
+        return self.layout.denormalize_font_size(self.layout.normalize_font_size(value), video_height)
 
 
 class SocialTypographyRenderer:
@@ -46,14 +49,16 @@ class SocialTypographyRenderer:
 
     def __init__(self, style: TypographyStyle | None = None) -> None:
         self.style = style or TypographyStyle()
+        self.layout = NormalizedLayoutEngine()
 
-    def render_image(self, text: str, template: TextTemplate, font_size: int, canvas_width: int, canvas_height: int):
+    def render_image(self, text: str, template: TextTemplate, font_size: float, canvas_width: int, canvas_height: int):
         """Return a minimal text bounding-box image, never a full-frame canvas."""
         if QImage is None:
             raise RuntimeError("PySide6 is required to render social typography assets.")
         self._ensure_qt_app()
         self._load_fonts()
-        scaled_font = max(12, round(font_size * canvas_height / REFERENCE_HEIGHT))
+        font_ratio = self.layout.normalize_font_size(font_size)
+        scaled_font = max(12, self.layout.denormalize_font_size(font_ratio, canvas_height))
         font = self._font(scaled_font)
         probe = QImage(8, 8, QImage.Format_ARGB32_Premultiplied)
         probe.fill(Qt.transparent)
@@ -92,7 +97,7 @@ class SocialTypographyRenderer:
         painter.end()
         return image
 
-    def render_png(self, path: Path, text: str, template: TextTemplate, font_size: int, canvas_width: int, canvas_height: int) -> Path:
+    def render_png(self, path: Path, text: str, template: TextTemplate, font_size: float, canvas_width: int, canvas_height: int) -> Path:
         """Write only the typography region PNG; FFmpeg positions it on the final canvas."""
         image = self.render_image(text, template, font_size, canvas_width, canvas_height)
         path.parent.mkdir(parents=True, exist_ok=True)

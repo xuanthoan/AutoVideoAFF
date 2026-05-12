@@ -210,7 +210,7 @@ if QMainWindow:
 
         def update_text_preview(self) -> None:
             self.state.overlays.text.template = self.workflow.template.currentText()
-            self.state.overlays.text.font_size = self.workflow.font_size.value()
+            self.state.overlays.text.set_font_size(self.workflow.font_size.value())
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
             self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)
@@ -219,7 +219,7 @@ if QMainWindow:
             self.preview.set_text_overlay(
                 self.state.overlays.text.text,
                 self.state.overlays.text.template,
-                self.state.overlays.text.font_size,
+                self.state.overlays.text.effective_font_ratio(),
                 active,
                 self.state.overlays.text.motion.value,
                 self.state.overlays.text.motion_speed,
@@ -369,7 +369,7 @@ if QMainWindow:
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None
             self.state.overlays.text.template = self.workflow.template.currentText()
-            self.state.overlays.text.font_size = self.workflow.font_size.value()
+            self.state.overlays.text.set_font_size(self.workflow.font_size.value())
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
             self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)

@@ -204,12 +204,12 @@ if QLabel:
                 return
             template = self._template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
-            key = (str(data["text"]), str(data["template"]), int(data["font_size"]), round(canvas.width()), round(canvas.height()))
+            key = (str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
             if key != self._text_pixmap_cache_key or self._text_pixmap_cache is None:
                 image = self._typography_renderer.render_image(
                     str(data["text"]),
                     template,
-                    int(data["font_size"]),
+                    float(data["font_size"]),
                     round(canvas.width()),
                     round(canvas.height()),
                 )

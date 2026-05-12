@@ -1,6 +1,7 @@
 """Unified text/sticker overlay pipeline module."""
 from __future__ import annotations
 
+from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.sticker_engine import StickerEngine
 from core.overlays.text_engine import TextEngine
 from core.overlays.transform import OverlayTransform
@@ -13,6 +14,7 @@ class OverlayPipeline:
     def __init__(self) -> None:
         self.text_engine = TextEngine()
         self.sticker_engine = StickerEngine()
+        self.layout = NormalizedLayoutEngine()
 
     def enabled(self, state) -> bool:
         return state.overlays.enabled
@@ -27,6 +29,7 @@ class OverlayPipeline:
                 temp_files=graph.temp_files,
             )
             graph.debug_events.append(f"[OVERLAY] text index={index} asset={asset_path.name} region=minimal_bbox")
+            graph.debug_events.append(self.layout.debug_font(text_overlay.effective_font_ratio(), job.video_height))
             graph.debug_events.append(self.text_engine.motion.debug_summary(text_overlay.motion, text_overlay.start_time, text_overlay.end_time, text_overlay.motion_speed, text_overlay.motion_strength))
             graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
             if "-shortest" not in graph.extra_args:
@@ -45,6 +48,7 @@ class OverlayPipeline:
                 f"[OVERLAY] sticker index={index} target_width={transform.sticker_width_pixels(job.video_width)} "
                 f"center=({transform.x:.3f},{transform.y:.3f}) rotation={transform.rotation:.1f}"
             )
+            graph.debug_events.append(self.layout.debug_sticker(transform.scale_ratio, job.video_width))
             graph.debug_events.append(self.sticker_engine.motion.debug_summary(sticker_overlay.motion, sticker_overlay.start_time, sticker_overlay.end_time, sticker_overlay.motion_speed, sticker_overlay.motion_strength))
             graph.inputs.extend(["-loop", "1", "-i", str(sticker_overlay.path)])
             if "-shortest" not in graph.extra_args:

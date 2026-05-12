@@ -4,6 +4,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.template_manager import TemplateManager
 from core.overlays.typography_engine import SocialTypographyRenderer
@@ -15,6 +16,7 @@ class TextEngine:
         self.templates = TemplateManager()
         self.motion = MotionEngine()
         self.typography = SocialTypographyRenderer()
+        self.layout = NormalizedLayoutEngine()
         self._asset_cache: dict[tuple[str, str, int, int, int], Path] = {}
 
     def build_filter(
@@ -43,11 +45,12 @@ class TextEngine:
         temp_files: list[Path] | None = None,
     ) -> Path:
         template = self.templates.get(overlay.template)
-        key = (overlay.text, overlay.template, overlay.font_size, canvas_width, canvas_height)
+        font_ratio = overlay.effective_font_ratio()
+        key = (overlay.text, overlay.template, round(font_ratio, 6), canvas_width, canvas_height)
         path = self._asset_cache.get(key)
         if path is None or not path.exists():
             path = self._new_asset_path()
-            self.typography.render_png(path, overlay.text, template, overlay.font_size, canvas_width, canvas_height)
+            self.typography.render_png(path, overlay.text, template, font_ratio, canvas_width, canvas_height)
             self._asset_cache[key] = path
         if temp_files is not None and path not in temp_files:
             temp_files.append(path)
