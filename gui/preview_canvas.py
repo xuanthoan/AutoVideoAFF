@@ -1,14 +1,18 @@
 """Realtime preview canvas with safe-area, live overlays, and snap guides."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
+from types import SimpleNamespace
 
 from core.overlays.highlight_library import HighlightStyleManager
 from core.overlays.template_manager import TemplateManager
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.transform import OverlayTransform
 from core.overlays.typography_engine import SocialTypographyRenderer
+from core.overlays.watermark_engine import WatermarkTextRenderer
 from core.safe_area_engine import NormalizedRect, SafeAreaEngine
+from models.watermark_overlay import WatermarkOverlay
 
 try:
     from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -40,14 +44,18 @@ if QLabel:
             self._template_manager = TemplateManager()
             self._highlight_style_manager = HighlightStyleManager()
             self._typography_renderer = SocialTypographyRenderer()
+            self._watermark_renderer = WatermarkTextRenderer()
             self._motion_engine = MotionEngine()
             self._current_time = 0.0
             self._text_pixmap_cache_key = None
             self._text_pixmap_cache = None
             self._highlight_pixmap_cache_key = None
             self._highlight_pixmap_cache = None
+            self._watermark_pixmap_cache_key = None
+            self._watermark_pixmap_cache = None
             self._last_motion_debug: dict[str, float] = {}
             self._overlays = {
+                "watermark": {"active": False, "x": 0.5, "y": 0.5, "w": 160, "h": 48, "text": "", "font_family": "Montserrat", "font_size": 44/1920, "font_color": "#FFFFFF", "opacity": 0.15, "rotation": -15.0, "slow_floating_motion": True, "instances": []},
                 "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
                 "highlight": {"active": False, "x": 0.5, "y": 0.25, "w": 280, "h": 96, "text": "", "template": "TikTok Bold", "font_size": 118/1920, "motion": "Pop", "motion_speed": 1.25, "motion_strength": 1.35, "start": 0.0, "end": 3.0},
                 "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
@@ -69,6 +77,25 @@ if QLabel:
                 self.setText("")
                 self._source_pixmap = pixmap
                 self._apply_scaled_pixmap()
+            self.update()
+
+        def set_watermark_overlay(
+            self,
+            watermark,
+            active: bool,
+        ) -> None:
+            data = self._overlays["watermark"]
+            data.update({
+                "text": watermark.text,
+                "font_family": watermark.font_family,
+                "font_size": watermark.effective_font_ratio(),
+                "font_color": watermark.font_color,
+                "opacity": watermark.opacity,
+                "rotation": watermark.rotation,
+                "slow_floating_motion": watermark.slow_floating_motion,
+                "instances": list(watermark.instances),
+                "active": active,
+            })
             self.update()
 
         def set_text_overlay(
@@ -216,6 +243,7 @@ if QLabel:
             painter.setRenderHint(QPainter.Antialiasing)
             if self._safe_area_enabled:
                 self._draw_safe_area(painter)
+            self._draw_watermark_overlay(painter)
             self._draw_text_overlay(painter)
             self._draw_highlight_overlay(painter)
             self._draw_sticker_overlay(painter)
@@ -225,6 +253,56 @@ if QLabel:
                 painter.drawLine(self._snap_x, 0, self._snap_x, self.height())
             if self._snap_y is not None:
                 painter.drawLine(0, self._snap_y, self.width(), self._snap_y)
+
+        def _draw_watermark_overlay(self, painter: QPainter) -> None:
+            data = self._overlays["watermark"]
+            if not data.get("active") or not str(data.get("text", "")).strip():
+                return
+            canvas = self._canvas_rect()
+            key = (
+                str(data["text"]),
+                str(data["font_family"]),
+                str(data["font_color"]),
+                float(data["font_size"]),
+                round(canvas.width()),
+                round(canvas.height()),
+            )
+            if key != self._watermark_pixmap_cache_key or self._watermark_pixmap_cache is None:
+                preview_watermark = WatermarkOverlay(
+                    text=str(data["text"]),
+                    font_family=str(data["font_family"]),
+                    font_ratio=float(data["font_size"]),
+                    font_color=str(data["font_color"]),
+                )
+                image = self._watermark_renderer.render_image(preview_watermark, round(canvas.width()), round(canvas.height()))
+                self._watermark_pixmap_cache = QPixmap.fromImage(image)
+                self._watermark_pixmap_cache_key = key
+            pixmap = self._watermark_pixmap_cache
+            data["w"] = pixmap.width()
+            data["h"] = pixmap.height()
+            for index, instance in enumerate(data.get("instances", []), start=1):
+                scaled = pixmap.scaled(
+                    max(1, round(pixmap.width() * max(0.2, float(instance.scale)))),
+                    max(1, round(pixmap.height() * max(0.2, float(instance.scale)))),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                x_offset = y_offset = 0.0
+                if data.get("slow_floating_motion", True):
+                    x_offset = (8.0 / 1920.0) * canvas.height() * float(instance.direction_x) * math.sin(self._current_time * 0.2 + float(instance.phase_x))
+                    y_offset = (5.0 / 1920.0) * canvas.height() * float(instance.direction_y) * math.cos(self._current_time * 0.15 + float(instance.phase_y))
+                center = QPointF(
+                    canvas.left() + float(instance.x) * canvas.width() + x_offset,
+                    canvas.top() + float(instance.y) * canvas.height() + y_offset,
+                )
+                painter.save()
+                painter.translate(center)
+                painter.rotate(float(data["rotation"]) + float(instance.rotation))
+                painter.setOpacity(min(max(float(data["opacity"]) * float(instance.opacity_multiplier), 0.0), 1.0))
+                painter.drawPixmap(QPointF(-scaled.width() / 2, -scaled.height() / 2), scaled)
+                painter.restore()
+                if index == 1:
+                    self._emit_motion_debug("watermark", {"motion": "Slow Floating" if data.get("slow_floating_motion", True) else "None", "x": instance.x, "y": instance.y}, SimpleNamespace(x_offset=x_offset, y_offset=y_offset, scale=instance.scale, opacity=float(data["opacity"]) * float(instance.opacity_multiplier), rotation_delta=instance.rotation))
 
         def _draw_text_overlay(self, painter: QPainter) -> None:
             self._draw_typography_overlay(painter, "text", self._template_manager)

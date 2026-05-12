@@ -10,6 +10,7 @@ from .highlight_overlay import HighlightOverlay
 from .overlay import CropFocus
 from .sticker_overlay import StickerOverlay
 from .text_overlay import TextOverlay
+from .watermark_overlay import WatermarkOverlay
 
 AspectRatio = Literal["9:16", "1:1", "16:9"]
 FadeCurve = Literal["linear", "smooth", "strong"]
@@ -100,15 +101,20 @@ class ImageCompositeSettings:
 
 @dataclass(slots=True)
 class OverlaySettings:
+    watermark_enabled: bool = False
     text_enabled: bool = False
     highlight_enabled: bool = False
     sticker_enabled: bool = False
+    watermark: WatermarkOverlay = field(default_factory=WatermarkOverlay)
     text: TextOverlay = field(default_factory=TextOverlay)
     highlight: HighlightOverlay = field(default_factory=HighlightOverlay)
     sticker: StickerOverlay = field(default_factory=StickerOverlay)
     text_layers: list[TextOverlay] = field(default_factory=list)
     highlight_layers: list[HighlightOverlay] = field(default_factory=list)
     sticker_layers: list[StickerOverlay] = field(default_factory=list)
+
+    def watermark_overlays(self) -> list[WatermarkOverlay]:
+        return [self.watermark] if self.watermark_enabled and self.watermark.active else []
 
     def text_overlays(self) -> list[TextOverlay]:
         layers = [overlay for overlay in self.text_layers if overlay.active]
@@ -130,7 +136,7 @@ class OverlaySettings:
 
     @property
     def enabled(self) -> bool:
-        return bool(self.text_overlays() or self.highlight_overlays() or self.sticker_overlays())
+        return bool(self.watermark_overlays() or self.text_overlays() or self.highlight_overlays() or self.sticker_overlays())
 
 
 @dataclass(slots=True)

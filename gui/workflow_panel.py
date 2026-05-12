@@ -32,13 +32,14 @@ except ImportError:
 from core.overlays.highlight_library import HIGHLIGHT_ANIMATIONS, HIGHLIGHT_STYLE_NAMES
 from core.overlays.template_manager import TemplateManager, TextTemplate
 from models.project_state import WorkflowMode
+from models.watermark_overlay import WATERMARK_COLORS, WATERMARK_FONTS, WATERMARK_DENSITY_COUNTS
 
 
 PIPELINE_CONFIG = {
-    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "text": False, "highlight": False, "sticker": False},
-    WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "text": True, "highlight": True, "sticker": True},
-    WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "text": True, "highlight": True, "sticker": True},
-    WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "text": True, "highlight": True, "sticker": True},
+    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "watermark": True, "text": False, "highlight": False, "sticker": False},
+    WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "watermark": True, "text": True, "highlight": True, "sticker": True},
+    WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "watermark": True, "text": True, "highlight": True, "sticker": True},
+    WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "watermark": True, "text": True, "highlight": True, "sticker": True},
 }
 
 
@@ -75,6 +76,17 @@ if QWidget:
             self.crop_focus = QComboBox(); self.crop_focus.addItems(["top", "center", "bottom"]); self.crop_focus.setCurrentText("center")
             self.fade_curve = QComboBox(); self.fade_curve.addItems(["linear", "smooth", "strong"])
 
+            self.watermark_enabled = QCheckBox("Enable Watermark")
+            self.watermark_text = QTextEdit(); self.watermark_text.setMaximumHeight(48); self.watermark_text.setPlaceholderText("@shopabc, TikTok: @abc, MY BRAND...")
+            self.watermark_font = QComboBox(); self.watermark_font.addItems(WATERMARK_FONTS)
+            self.watermark_font_size = QSpinBox(); self.watermark_font_size.setRange(12, 120); self.watermark_font_size.setValue(44)
+            self.watermark_color = QComboBox(); self.watermark_color.addItems(WATERMARK_COLORS)
+            self.watermark_opacity = QSpinBox(); self.watermark_opacity.setRange(3, 60); self.watermark_opacity.setValue(15); self.watermark_opacity.setSuffix("%")
+            self.watermark_rotation = QSpinBox(); self.watermark_rotation.setRange(-45, 45); self.watermark_rotation.setValue(-15); self.watermark_rotation.setSuffix("°")
+            self.watermark_random_position = QCheckBox("Enable Random Position"); self.watermark_random_position.setChecked(True)
+            self.watermark_slow_motion = QCheckBox("Enable Slow Floating Motion"); self.watermark_slow_motion.setChecked(True)
+            self.watermark_density = QComboBox(); self.watermark_density.addItems(WATERMARK_DENSITY_COUNTS.keys())
+
             self.text = QTextEdit(); self.text.setMaximumHeight(70)
             self.text.setPlaceholderText("TEXT - nhập text để tự tạo layer")
             self.template = QComboBox()
@@ -108,10 +120,11 @@ if QWidget:
             self.pipeline_panel = self._pipeline_group()
             self.shuffle_panel = self._scene_group()
             self.image_panel = self._image_group(image_button)
+            self.watermark_panel = self._watermark_group()
             self.text_panel = self._text_group()
             self.highlight_panel = self._highlight_group()
             self.sticker_panel = self._sticker_group(sticker_button)
-            for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.text_panel, self.highlight_panel, self.sticker_panel):
+            for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.watermark_panel, self.text_panel, self.highlight_panel, self.sticker_panel):
                 layout.addWidget(group)
             layout.addStretch()
             self._ui_ready = True
@@ -142,12 +155,13 @@ if QWidget:
         def apply_pipeline_ui_state(self) -> None:
             if not getattr(self, "_ui_ready", False):
                 return
-            required_panels = ("shuffle_panel", "image_panel", "text_panel", "highlight_panel", "sticker_panel")
+            required_panels = ("shuffle_panel", "image_panel", "watermark_panel", "text_panel", "highlight_panel", "sticker_panel")
             if any(not hasattr(self, panel_name) for panel_name in required_panels):
                 return
             config = PIPELINE_CONFIG[self.selected_workflow_mode()]
             self._set_panel_state(self.shuffle_panel, config["shuffle"])
             self._set_panel_state(self.image_panel, config["image"])
+            self._set_panel_state(self.watermark_panel, config["watermark"])
             self._set_panel_state(self.text_panel, config["text"])
             self._set_panel_state(self.highlight_panel, config["highlight"])
             self._set_panel_state(self.sticker_panel, config["sticker"])
@@ -265,8 +279,23 @@ if QWidget:
             form.addRow("Fade", self.fade_curve)
             return group
 
+        def _watermark_group(self):
+            group = QGroupBox("4. WATERMARK")
+            form = self._compact_form(group)
+            form.addRow(self.watermark_enabled)
+            form.addRow("Watermark Text", self.watermark_text)
+            form.addRow("Font", self.watermark_font)
+            form.addRow("Font Size", self.watermark_font_size)
+            form.addRow("Font Color", self.watermark_color)
+            form.addRow("Opacity", self.watermark_opacity)
+            form.addRow("Rotation", self.watermark_rotation)
+            form.addRow(self.watermark_random_position)
+            form.addRow(self.watermark_slow_motion)
+            form.addRow("Density", self.watermark_density)
+            return group
+
         def _text_group(self):
-            group = QGroupBox("4. TEXT")
+            group = QGroupBox("5. TEXT")
             form = self._compact_form(group)
             form.addRow("TEXT", self.text)
             form.addRow("Template", self.template)
@@ -278,7 +307,7 @@ if QWidget:
 
 
         def _highlight_group(self):
-            group = QGroupBox("5. HIGHLIGHT")
+            group = QGroupBox("6. HIGHLIGHT")
             form = self._compact_form(group)
             form.addRow(self.highlight_enabled)
             form.addRow("Highlight Text", self.highlight_text)
@@ -287,7 +316,7 @@ if QWidget:
             return group
 
         def _sticker_group(self, button):
-            group = QGroupBox("6. STICKER")
+            group = QGroupBox("7. STICKER")
             form = self._compact_form(group)
             form.addRow(button)
             form.addRow("Scale", self.sticker_scale)

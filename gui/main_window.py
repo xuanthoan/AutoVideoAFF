@@ -14,6 +14,7 @@ except ImportError:
     Qt = QThread = QUrl = Signal = QDesktopServices = QFileDialog = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.pipeline.shuffle_pipeline import SceneShufflePipeline
+from core.overlays.watermark_engine import WatermarkLayoutEngine
 from core.renderer.batch_renderer import BatchRenderer
 from core.renderer.preview_renderer import PreviewRenderer
 from core.video.scene_detector import SceneDetector
@@ -73,6 +74,7 @@ if QMainWindow:
             self.stop_button.setEnabled(False)
             self.open_output_button = QPushButton("Open Output Folder")
             self.preview_renderer = PreviewRenderer()
+            self.watermark_layout = WatermarkLayoutEngine()
             self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
             self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
             self.log_box = QTextEdit()
@@ -131,6 +133,16 @@ if QMainWindow:
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
+            self.workflow.watermark_enabled.toggled.connect(lambda _checked: self.update_watermark_preview())
+            self.workflow.watermark_text.textChanged.connect(lambda: self.update_watermark_preview())
+            self.workflow.watermark_font.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
+            self.workflow.watermark_font_size.valueChanged.connect(lambda _value: self.update_watermark_preview())
+            self.workflow.watermark_color.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
+            self.workflow.watermark_opacity.valueChanged.connect(lambda _value: self.update_watermark_preview())
+            self.workflow.watermark_rotation.valueChanged.connect(lambda _value: self.update_watermark_preview())
+            self.workflow.watermark_random_position.toggled.connect(lambda _checked: self.update_watermark_preview())
+            self.workflow.watermark_slow_motion.toggled.connect(lambda _checked: self.update_watermark_preview())
+            self.workflow.watermark_density.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
             self.workflow.template.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.font_size.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
@@ -169,9 +181,11 @@ if QMainWindow:
         def sync_preview_panel_state(self) -> None:
             mode = self.workflow.selected_workflow_mode()
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
+            self.update_watermark_preview()
             self.update_text_preview()
             self.update_highlight_preview()
             self.update_sticker_preview()
+            self.update_watermark_preview()
 
         def open_output_folder(self) -> None:
             output_path = output_directory_for_videos(self.state.videos, self.state.export.output_dir).resolve()
@@ -200,6 +214,7 @@ if QMainWindow:
             self.state.overlays.sticker = StickerOverlay(path=Path(path))
             self.state.overlays.sticker.set_full_duration(self.video_duration)
             self.update_highlight_preview()
+            self.update_watermark_preview()
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),
@@ -230,6 +245,28 @@ if QMainWindow:
                 self.state.overlays.sticker.y = y
 
 
+        def update_watermark_preview(self) -> None:
+            watermark = self.state.overlays.watermark
+            watermark.text = self.workflow.watermark_text.toPlainText().strip()
+            watermark.font_family = self.workflow.watermark_font.currentText()
+            watermark.set_font_size(self.workflow.watermark_font_size.value())
+            watermark.font_color = self.workflow.watermark_color.currentText()
+            watermark.opacity_percent = int(self.workflow.watermark_opacity.value())
+            watermark.rotation = float(self.workflow.watermark_rotation.value())
+            watermark.random_position = self.workflow.watermark_random_position.isChecked()
+            watermark.slow_floating_motion = self.workflow.watermark_slow_motion.isChecked()
+            watermark.density = self.workflow.watermark_density.currentText()  # type: ignore[assignment]
+            watermark.enabled = self.workflow.watermark_enabled.isChecked()
+            self.state.overlays.watermark_enabled = watermark.active
+            if watermark.active:
+                watermark.instances = self.watermark_layout.generate(self.state.overlays, seed=self._current_watermark_seed())
+            self.preview.set_watermark_overlay(watermark, watermark.active)
+
+        def _current_watermark_seed(self) -> int:
+            source = str(self.current_video_path.resolve() if self.current_video_path else "preview")
+            return int(hashlib.sha1(source.encode("utf-8")).hexdigest()[:12], 16)
+
+
         def update_text_preview(self) -> None:
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.set_font_size(self.workflow.font_size.value())
@@ -249,6 +286,7 @@ if QMainWindow:
             )
             self.preview.set_overlay_timing("text", self.state.overlays.text.start_time, self.state.overlays.text.end_time)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
+            self.update_watermark_preview()
 
 
         def update_highlight_preview(self) -> None:
@@ -276,6 +314,7 @@ if QMainWindow:
             )
             self.preview.set_overlay_timing("highlight", highlight.start_time, highlight.end_time)
             self.preview.set_overlay_position("highlight", highlight.x, highlight.y)
+            self.update_watermark_preview()
 
         def update_sticker_preview(self) -> None:
             mode = self.workflow.selected_workflow_mode()
@@ -291,10 +330,12 @@ if QMainWindow:
             )
             self.preview.set_overlay_timing("sticker", self.state.overlays.sticker.start_time, self.state.overlays.sticker.end_time)
             self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
+            self.update_watermark_preview()
 
         def set_playhead_time(self, time_seconds: float) -> None:
             self.timeline.set_playhead_time(time_seconds)
             self.preview.set_playhead_time(time_seconds)
+            self.update_watermark_preview()
             self.update_text_preview()
             self.update_highlight_preview()
             self.update_sticker_preview()
@@ -306,6 +347,7 @@ if QMainWindow:
             overlay.set_timing(start, end)
             self.preview.set_overlay_timing(key, start, end)
             self.refresh_timeline()
+            self.update_watermark_preview()
             self.update_text_preview()
             self.update_highlight_preview()
             self.update_sticker_preview()
@@ -331,6 +373,7 @@ if QMainWindow:
                 self.workflow.highlight_enabled.setChecked(visible)
             elif key == "sticker":
                 self.state.overlays.sticker_enabled = visible and self.state.overlays.sticker.active
+            self.update_watermark_preview()
             self.update_text_preview()
             self.update_highlight_preview()
             self.update_sticker_preview()
@@ -410,6 +453,7 @@ if QMainWindow:
             if self.state.overlays.sticker.path is None:
                 self.state.overlays.sticker.set_full_duration(self.video_duration)
             self.refresh_timeline()
+            self.update_watermark_preview()
 
 
         def _timeline_segments(self) -> list[TimelineSegment]:
@@ -531,6 +575,7 @@ if QMainWindow:
                 if not preview_path.exists():
                     self.preview_renderer.extract_first_valid_frame(video_path, preview_path)
                 self.preview.set_preview_image(preview_path)
+                self.update_watermark_preview()
             except Exception as exc:
                 self.append_log(f"[WARNING] Không tạo được preview: {exc}")
 
@@ -550,6 +595,7 @@ if QMainWindow:
             self.state.image_composite.fade_curve = self.workflow.fade_curve.currentText()
             self.set_safe_area_options("TikTok", True, True)
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
+            self.update_watermark_preview()
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
             self.state.overlays.highlight_enabled = overlay_pipeline and self.workflow.highlight_enabled.isChecked() and bool(self.state.overlays.highlight.text.strip())
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None
@@ -559,6 +605,7 @@ if QMainWindow:
             self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)
             self.update_highlight_preview()
+            self.update_watermark_preview()
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),

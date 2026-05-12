@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import subprocess
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from core.overlays.highlight_library import HighlightStyleManager
+from core.overlays.watermark_engine import WatermarkLayoutEngine
 from core.pipeline.manager import PipelineManager
 from core.overlays.template_manager import TemplateManager
 from models.project_state import ProjectState, WorkflowMode
@@ -26,6 +28,7 @@ class BatchRenderer:
         self.process_manager = ProcessManager()
         self.template_manager = TemplateManager()
         self.highlight_style_manager = HighlightStyleManager()
+        self.watermark_layout = WatermarkLayoutEngine()
         self._last_random_template: str | None = None
 
     def stop(self) -> None:
@@ -78,10 +81,10 @@ class BatchRenderer:
                     self._log(log, "INFO", "Shuffling video segments only...")
                 if state.workflow_mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2} and state.image_composite.enabled:
                     self._log(log, "INFO", "Applying image composite...")
-                if state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and state.overlays.enabled:
+                if state.overlays.enabled and (state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} or state.overlays.watermark_enabled):
                     self._log(log, "INFO", "Rendering overlays...")
                 self._log(log, "INFO", "Exporting final video...")
-                render_state = self._state_for_video(state)
+                render_state = self._state_for_video(state, video)
                 cmd = self.manager.build_command(video, temp_output, render_state, original_audio_path=original_audio_path)
                 self._log_debug_events(log)
                 if render_state.export.developer_mode:
@@ -112,7 +115,7 @@ class BatchRenderer:
         return outputs
 
 
-    def _state_for_video(self, state: ProjectState) -> ProjectState:
+    def _state_for_video(self, state: ProjectState, video: Path | None = None) -> ProjectState:
         random_texts = [
             overlay
             for overlay in state.overlays.text_overlays()
@@ -123,7 +126,8 @@ class BatchRenderer:
             for overlay in state.overlays.highlight_overlays()
             if overlay.style == HighlightStyleManager.RANDOM_STYLE_NAME
         ]
-        if not random_texts and not random_highlights:
+        watermark_active = bool(state.overlays.watermark_overlays())
+        if not random_texts and not random_highlights and not watermark_active:
             return state
         render_state = copy.deepcopy(state)
         for overlay in render_state.overlays.text_overlays():
@@ -134,7 +138,15 @@ class BatchRenderer:
         for overlay in render_state.overlays.highlight_overlays():
             if overlay.style == HighlightStyleManager.RANDOM_STYLE_NAME:
                 overlay.style = self.highlight_style_manager.random_style().name
+        if render_state.overlays.watermark_overlays():
+            seed = self._watermark_seed(video)
+            render_state.overlays.watermark.instances = self.watermark_layout.generate(render_state.overlays, seed=seed)
         return render_state
+
+    @staticmethod
+    def _watermark_seed(video: Path | None) -> int:
+        source = str(video.resolve() if video else "preview")
+        return int(hashlib.sha1(source.encode("utf-8")).hexdigest()[:12], 16)
 
     def _extract_original_audio(self, video: Path, audio_output: Path, log: LogCallback | None) -> Path | None:
         copy_cmd = [executable("ffmpeg"), "-y", "-i", str(video), "-vn", "-acodec", "copy", str(audio_output)]

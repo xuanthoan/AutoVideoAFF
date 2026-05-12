@@ -5,6 +5,7 @@ from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.highlight_engine import HighlightEngine
 from core.overlays.sticker_engine import StickerEngine
 from core.overlays.text_engine import TextEngine
+from core.overlays.watermark_engine import WatermarkEngine
 from core.overlays.transform import OverlayTransform
 from core.pipeline.base import FilterGraph, RenderJob
 
@@ -14,6 +15,7 @@ class OverlayPipeline:
 
     def __init__(self) -> None:
         self.text_engine = TextEngine()
+        self.watermark_engine = WatermarkEngine()
         self.highlight_engine = HighlightEngine()
         self.sticker_engine = StickerEngine()
         self.layout = NormalizedLayoutEngine()
@@ -23,6 +25,30 @@ class OverlayPipeline:
 
     def apply(self, job: RenderJob, graph: FilterGraph) -> FilterGraph:
         overlays = job.state.overlays
+        for wm_index, watermark in enumerate(overlays.watermark_overlays(), start=1):
+            asset_path = self.watermark_engine.render_asset(
+                watermark,
+                job.video_width,
+                job.video_height,
+                temp_files=graph.temp_files,
+            )
+            graph.debug_events.append(
+                f"[OVERLAY] watermark index={wm_index} asset={asset_path.name} density={watermark.density} opacity={watermark.opacity:.2f} region=minimal_bbox"
+            )
+            graph.debug_events.append(self.layout.debug_font(watermark.effective_font_ratio(), job.video_height))
+            for instance_index, instance in enumerate(watermark.instances, start=1):
+                graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
+                if "-shortest" not in graph.extra_args:
+                    graph.extra_args.append("-shortest")
+                watermark_input_index = sum(1 for token in graph.inputs if token == "-i")
+                chain, output = self.watermark_engine.build_filter(
+                    graph.video_label,
+                    f"{watermark_input_index}:v",
+                    watermark,
+                    instance,
+                    suffix=f"_{wm_index}_{instance_index}",
+                )
+                graph.add_chain(chain, output)
         for index, text_overlay in enumerate(overlays.text_overlays(), start=1):
             asset_path = self.text_engine.render_asset(
                 text_overlay,
