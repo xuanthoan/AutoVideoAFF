@@ -69,10 +69,11 @@ if QMainWindow:
             self.video_duration = 6.0
             self.current_video_path: Path | None = None
             self.workflow = WorkflowPanel()
-            self.export_button = QPushButton(self.state.render_count_label())
+            self.export_button = QPushButton("Render Video")
             self.stop_button = QPushButton("Stop")
             self.stop_button.setEnabled(False)
             self.open_output_button = QPushButton("Open Output Folder")
+            self.workflow.set_export_controls(self.export_button, self.stop_button, self.open_output_button)
             self.preview_renderer = PreviewRenderer()
             self.watermark_layout = WatermarkLayoutEngine()
             self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
@@ -87,8 +88,8 @@ if QMainWindow:
             self._wire()
             root = QWidget(); layout = QHBoxLayout(root)
             left_splitter = QSplitter(Qt.Vertical)
-            left_splitter.setMinimumWidth(280)
-            left_splitter.setMaximumWidth(340)
+            left_splitter.setMinimumWidth(220)
+            left_splitter.setMaximumWidth(320)
             left_splitter.addWidget(self.queue)
             left_splitter.addWidget(self.log_box)
             left_splitter.setSizes([700, 240])
@@ -104,15 +105,12 @@ if QMainWindow:
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(360)
-            right_column.setMaximumWidth(420)
+            right_column.setMinimumWidth(540)
+            right_column.setMaximumWidth(660)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
             right_column_layout.addWidget(right_scroll, 1)
-            right_column_layout.addWidget(self.export_button)
-            right_column_layout.addWidget(self.stop_button)
-            right_column_layout.addWidget(self.open_output_button)
 
             center_column = QWidget()
             center_layout = QVBoxLayout(center_column)
@@ -121,9 +119,11 @@ if QMainWindow:
             center_layout.addWidget(self.preview, 1)
             center_layout.addWidget(self.timeline, 0)
 
-            layout.addWidget(left_splitter, 0)
-            layout.addWidget(center_column, 1)
-            layout.addWidget(right_column, 0)
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(8)
+            layout.addWidget(left_splitter, 16)
+            layout.addWidget(center_column, 56)
+            layout.addWidget(right_column, 28)
             self.setCentralWidget(root)
 
         def _wire(self) -> None:
@@ -146,7 +146,7 @@ if QMainWindow:
             self.workflow.template.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.font_size.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
-            self.workflow.text_motion_speed.valueChanged.connect(lambda _value: self.update_text_preview())
+            self.workflow.text_motion_speed.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.text_motion_strength.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.highlight_enabled.toggled.connect(lambda _checked: (self.update_highlight_preview(), self.refresh_timeline()))
             self.workflow.highlight_text.textChanged.connect(lambda: (self.update_highlight_preview(), self.refresh_timeline()))
@@ -195,7 +195,7 @@ if QMainWindow:
 
         def set_videos(self, paths: list[Path]) -> None:
             self.state.videos = paths
-            self.export_button.setText(self.state.render_count_label())
+            self.export_button.setText("Render Video")
             self.append_log(f"[INFO] Loading videos: {len(paths)} video")
             if paths:
                 self.set_video_duration(paths[0])
@@ -640,7 +640,7 @@ if QMainWindow:
         def render_finished(self, paths: list[str]) -> None:
             self.export_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.export_button.setText("Render Complete")
+            self.export_button.setText("Render Video")
             self.status.showMessage(f"Hoàn tất {len(paths)} video")
             self.append_log(f"[SUCCESS] Hoàn tất {len(paths)} video.")
             if self.state.export.auto_open_output:
@@ -649,7 +649,7 @@ if QMainWindow:
         def render_failed(self, message: str) -> None:
             self.export_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.export_button.setText(self.state.render_count_label())
+            self.export_button.setText("Render Video")
             self.status.showMessage("Render lỗi")
             self.append_log("[ERROR] " + message)
 else:

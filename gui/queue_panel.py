@@ -22,17 +22,21 @@ if QWidget:
             self.list = QListWidget()
             self.list.setDragDropMode(QListWidget.InternalMove)
             self.list.currentRowChanged.connect(self.emit_current_path)
-            add_video = QPushButton("Add video")
-            add_folder = QPushButton("Add folder")
-            remove = QPushButton("Remove selected")
-            clear = QPushButton("Clear all")
+            add_video = QPushButton("Add Video")
+            add_folder = QPushButton("Add Folder")
+            remove = QPushButton("Remove Selected")
+            clear = QPushButton("Clear All")
             add_video.clicked.connect(self.add_video)
             add_folder.clicked.connect(self.add_folder)
             remove.clicked.connect(self.remove_selected)
             clear.clicked.connect(self.clear_all)
             layout = QVBoxLayout(self)
-            for widget in (self.list, add_video, add_folder, remove, clear):
-                layout.addWidget(widget)
+            layout.setContentsMargins(4, 4, 4, 4)
+            layout.setSpacing(5)
+            self.setStyleSheet("QPushButton { min-height: 30px; max-height: 34px; } QListWidget { border:1px solid #333; }")
+            layout.addWidget(self.list, 1)
+            for widget in (add_video, add_folder, remove, clear):
+                layout.addWidget(widget, 0)
 
         def paths(self) -> list[Path]:
             return [Path(self.list.item(i).text()) for i in range(self.list.count())]
