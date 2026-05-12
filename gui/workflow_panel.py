@@ -50,6 +50,7 @@ if QWidget:
 
         def __init__(self) -> None:
             super().__init__()
+            self._ui_ready = False
             self.template_manager = TemplateManager()
             self.pipeline_group = QButtonGroup(self)
             self.pipeline_buttons: dict[WorkflowMode, QRadioButton] = {}
@@ -57,8 +58,10 @@ if QWidget:
                 button = QRadioButton(mode.value)
                 self.pipeline_buttons[mode] = button
                 self.pipeline_group.addButton(button)
-                button.toggled.connect(lambda _checked: self.apply_pipeline_ui_state())
-            self.pipeline_buttons[WorkflowMode.PIPELINE_1].setChecked(True)
+            default_button = self.pipeline_buttons[WorkflowMode.PIPELINE_1]
+            default_button.blockSignals(True)
+            default_button.setChecked(True)
+            default_button.blockSignals(False)
 
             self.scene_sensitivity = QSpinBox(); self.scene_sensitivity.setRange(10, 80); self.scene_sensitivity.setValue(30)
             self.fallback_min = QDoubleSpinBox(); self.fallback_min.setRange(1.0, 10.0); self.fallback_min.setValue(3.0); self.fallback_min.setSuffix("s")
@@ -87,16 +90,6 @@ if QWidget:
 
             sticker_button = QPushButton("Chọn sticker")
             image_button = QPushButton("Chọn ảnh (multi-select)")
-            image_button.clicked.connect(self.pick_images)
-            sticker_button.clicked.connect(self.pick_sticker)
-
-            self.text.textChanged.connect(lambda: self.textChanged.emit(self.text.toPlainText()))
-            self.sticker_scale.valueChanged.connect(lambda _value: self.emit_sticker_controls())
-            self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
-            self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
-            self.sticker_motion_speed.valueChanged.connect(lambda _value: self.emit_sticker_controls())
-            self.sticker_motion_strength.valueChanged.connect(lambda _value: self.emit_sticker_controls())
-            self.image_height.valueChanged.connect(lambda _value: self._clamp_overlap())
 
             layout = QVBoxLayout(self)
             layout.setContentsMargins(6, 6, 6, 6)
@@ -109,7 +102,22 @@ if QWidget:
             for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.text_panel, self.sticker_panel):
                 layout.addWidget(group)
             layout.addStretch()
+            self._ui_ready = True
+            self._connect_signals(image_button, sticker_button)
             self.apply_pipeline_ui_state()
+
+        def _connect_signals(self, image_button: QPushButton, sticker_button: QPushButton) -> None:
+            for button in self.pipeline_buttons.values():
+                button.toggled.connect(lambda _checked: self.apply_pipeline_ui_state())
+            image_button.clicked.connect(self.pick_images)
+            sticker_button.clicked.connect(self.pick_sticker)
+            self.text.textChanged.connect(lambda: self.textChanged.emit(self.text.toPlainText()))
+            self.sticker_scale.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
+            self.sticker_motion_speed.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_motion_strength.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.image_height.valueChanged.connect(lambda _value: self._clamp_overlap())
 
         def selected_workflow_mode(self) -> WorkflowMode:
             for mode, button in self.pipeline_buttons.items():
@@ -118,6 +126,11 @@ if QWidget:
             return WorkflowMode.PIPELINE_1
 
         def apply_pipeline_ui_state(self) -> None:
+            if not getattr(self, "_ui_ready", False):
+                return
+            required_panels = ("shuffle_panel", "image_panel", "text_panel", "sticker_panel")
+            if any(not hasattr(self, panel_name) for panel_name in required_panels):
+                return
             config = PIPELINE_CONFIG[self.selected_workflow_mode()]
             self._set_panel_state(self.shuffle_panel, config["shuffle"])
             self._set_panel_state(self.image_panel, config["image"])
