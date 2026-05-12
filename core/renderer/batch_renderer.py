@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from core.overlays.highlight_library import HighlightStyleManager
 from core.pipeline.manager import PipelineManager
 from core.overlays.template_manager import TemplateManager
 from models.project_state import ProjectState, WorkflowMode
@@ -24,6 +25,7 @@ class BatchRenderer:
         self.debug = debug
         self.process_manager = ProcessManager()
         self.template_manager = TemplateManager()
+        self.highlight_style_manager = HighlightStyleManager()
         self._last_random_template: str | None = None
 
     def stop(self) -> None:
@@ -116,7 +118,12 @@ class BatchRenderer:
             for overlay in state.overlays.text_overlays()
             if overlay.template == TemplateManager.RANDOM_TEMPLATE_NAME
         ]
-        if not random_texts:
+        random_highlights = [
+            overlay
+            for overlay in state.overlays.highlight_overlays()
+            if overlay.style == HighlightStyleManager.RANDOM_STYLE_NAME
+        ]
+        if not random_texts and not random_highlights:
             return state
         render_state = copy.deepcopy(state)
         for overlay in render_state.overlays.text_overlays():
@@ -124,6 +131,9 @@ class BatchRenderer:
                 selected = self.template_manager.random_name(self._last_random_template)
                 self._last_random_template = selected
                 overlay.template = selected
+        for overlay in render_state.overlays.highlight_overlays():
+            if overlay.style == HighlightStyleManager.RANDOM_STYLE_NAME:
+                overlay.style = self.highlight_style_manager.random_style().name
         return render_state
 
     def _extract_original_audio(self, video: Path, audio_output: Path, log: LogCallback | None) -> Path | None:

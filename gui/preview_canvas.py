@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.overlays.highlight_library import HighlightStyleManager
 from core.overlays.template_manager import TemplateManager
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.transform import OverlayTransform
@@ -37,14 +38,18 @@ if QLabel:
             self._safe_area_enabled = True
             self._snap_enabled = True
             self._template_manager = TemplateManager()
+            self._highlight_style_manager = HighlightStyleManager()
             self._typography_renderer = SocialTypographyRenderer()
             self._motion_engine = MotionEngine()
             self._current_time = 0.0
             self._text_pixmap_cache_key = None
             self._text_pixmap_cache = None
+            self._highlight_pixmap_cache_key = None
+            self._highlight_pixmap_cache = None
             self._last_motion_debug: dict[str, float] = {}
             self._overlays = {
                 "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
+                "highlight": {"active": False, "x": 0.5, "y": 0.25, "w": 280, "h": 96, "text": "", "template": "TikTok Bold", "font_size": 118/1920, "motion": "Pop", "motion_speed": 1.25, "motion_strength": 1.35, "start": 0.0, "end": 3.0},
                 "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
             }
             self._drag_kind: str | None = None
@@ -80,6 +85,28 @@ if QLabel:
             data.update({
                 "text": text,
                 "template": template,
+                "font_size": font_size,
+                "active": active,
+                "motion": motion,
+                "motion_speed": motion_speed,
+                "motion_strength": motion_strength,
+            })
+            self.update()
+
+        def set_highlight_overlay(
+            self,
+            text: str,
+            style: str,
+            font_size: float,
+            active: bool,
+            motion: str = "Pop",
+            motion_speed: float = 1.25,
+            motion_strength: float = 1.35,
+        ) -> None:
+            data = self._overlays["highlight"]
+            data.update({
+                "text": text,
+                "template": style,
                 "font_size": font_size,
                 "active": active,
                 "motion": motion,
@@ -142,7 +169,7 @@ if QLabel:
         def mousePressEvent(self, event):
             if event.button() != Qt.LeftButton:
                 return super().mousePressEvent(event)
-            for kind in ("sticker", "text"):
+            for kind in ("sticker", "highlight", "text"):
                 if self._overlay_rect(kind).contains(event.position()):
                     self._drag_kind = kind
                     return
@@ -190,6 +217,7 @@ if QLabel:
             if self._safe_area_enabled:
                 self._draw_safe_area(painter)
             self._draw_text_overlay(painter)
+            self._draw_highlight_overlay(painter)
             self._draw_sticker_overlay(painter)
             guide_pen = QPen(QColor(90, 190, 255, 170), 2)
             painter.setPen(guide_pen)
@@ -199,13 +227,21 @@ if QLabel:
                 painter.drawLine(0, self._snap_y, self.width(), self._snap_y)
 
         def _draw_text_overlay(self, painter: QPainter) -> None:
-            data = self._overlays["text"]
+            self._draw_typography_overlay(painter, "text", self._template_manager)
+
+        def _draw_highlight_overlay(self, painter: QPainter) -> None:
+            self._draw_typography_overlay(painter, "highlight", self._highlight_style_manager)
+
+        def _draw_typography_overlay(self, painter: QPainter, kind: str, template_manager) -> None:
+            data = self._overlays[kind]
             if not self._overlay_visible(data) or not str(data["text"]).strip():
                 return
-            template = self._template_manager.get(str(data["template"]))
+            template = template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
-            key = (str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
-            if key != self._text_pixmap_cache_key or self._text_pixmap_cache is None:
+            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
+            cache_attr = "_highlight_pixmap_cache" if kind == "highlight" else "_text_pixmap_cache"
+            key_attr = "_highlight_pixmap_cache_key" if kind == "highlight" else "_text_pixmap_cache_key"
+            if key != getattr(self, key_attr) or getattr(self, cache_attr) is None:
                 image = self._typography_renderer.render_image(
                     str(data["text"]),
                     template,
@@ -213,9 +249,9 @@ if QLabel:
                     round(canvas.width()),
                     round(canvas.height()),
                 )
-                self._text_pixmap_cache = QPixmap.fromImage(image)
-                self._text_pixmap_cache_key = key
-            pixmap = self._text_pixmap_cache
+                setattr(self, cache_attr, QPixmap.fromImage(image))
+                setattr(self, key_attr, key)
+            pixmap = getattr(self, cache_attr)
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
             transformed, transform = self._preview_transform(data, pixmap, canvas)
@@ -227,7 +263,7 @@ if QLabel:
             painter.setOpacity(transform.opacity)
             painter.drawPixmap(QPointF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2), transformed)
             painter.restore()
-            self._emit_motion_debug("text", data, transform)
+            self._emit_motion_debug(kind, data, transform)
 
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]
@@ -345,7 +381,7 @@ if QLabel:
 
         def _clamp_to_safe_area(self, kind: str, x: float, y: float) -> tuple[float, float]:
             rect = self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform)
-            safe = rect.text_safe_rect if kind == "text" else rect.sticker_safe_rect
+            safe = rect.sticker_safe_rect if kind == "sticker" else rect.text_safe_rect
             return min(max(x, safe.x), safe.x + safe.width), min(max(y, safe.y), safe.y + safe.height)
 
         def safe_rect(self) -> tuple[int, int, int, int]:

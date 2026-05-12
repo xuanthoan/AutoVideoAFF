@@ -29,15 +29,16 @@ except ImportError:
     QButtonGroup = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
     QGroupBox = QListWidget = QPushButton = QRadioButton = QSlider = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
 
+from core.overlays.highlight_library import HIGHLIGHT_ANIMATIONS, HIGHLIGHT_STYLE_NAMES
 from core.overlays.template_manager import TemplateManager, TextTemplate
 from models.project_state import WorkflowMode
 
 
 PIPELINE_CONFIG = {
-    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "text": False, "sticker": False},
-    WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "text": True, "sticker": True},
-    WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "text": True, "sticker": True},
-    WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "text": True, "sticker": True},
+    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "text": False, "highlight": False, "sticker": False},
+    WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "text": True, "highlight": True, "sticker": True},
+    WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "text": True, "highlight": True, "sticker": True},
+    WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "text": True, "highlight": True, "sticker": True},
 }
 
 
@@ -83,6 +84,12 @@ if QWidget:
             self.text_motion_speed = self._motion_speed_slider()
             self.text_motion_strength = self._motion_strength_slider()
 
+            self.highlight_enabled = QCheckBox("Enable Highlight")
+            self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(54); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
+            self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
+            self.highlight_animation = QComboBox(); self.highlight_animation.addItems(HIGHLIGHT_ANIMATIONS)
+            self.highlight_animation.setCurrentText("Pop")
+
             self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.05, 0.45); self.sticker_scale.setSingleStep(0.01); self.sticker_scale.setDecimals(2); self.sticker_scale.setValue(0.16); self.sticker_scale.setSuffix(" canvas")
             self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake", "Rotate Float"])
@@ -102,8 +109,9 @@ if QWidget:
             self.shuffle_panel = self._scene_group()
             self.image_panel = self._image_group(image_button)
             self.text_panel = self._text_group()
+            self.highlight_panel = self._highlight_group()
             self.sticker_panel = self._sticker_group(sticker_button)
-            for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.text_panel, self.sticker_panel):
+            for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.text_panel, self.highlight_panel, self.sticker_panel):
                 layout.addWidget(group)
             layout.addStretch()
             self._ui_ready = True
@@ -134,13 +142,14 @@ if QWidget:
         def apply_pipeline_ui_state(self) -> None:
             if not getattr(self, "_ui_ready", False):
                 return
-            required_panels = ("shuffle_panel", "image_panel", "text_panel", "sticker_panel")
+            required_panels = ("shuffle_panel", "image_panel", "text_panel", "highlight_panel", "sticker_panel")
             if any(not hasattr(self, panel_name) for panel_name in required_panels):
                 return
             config = PIPELINE_CONFIG[self.selected_workflow_mode()]
             self._set_panel_state(self.shuffle_panel, config["shuffle"])
             self._set_panel_state(self.image_panel, config["image"])
             self._set_panel_state(self.text_panel, config["text"])
+            self._set_panel_state(self.highlight_panel, config["highlight"])
             self._set_panel_state(self.sticker_panel, config["sticker"])
             self.changed.emit()
 
@@ -267,8 +276,18 @@ if QWidget:
             form.addRow("Strength", self.text_motion_strength)
             return group
 
+
+        def _highlight_group(self):
+            group = QGroupBox("5. HIGHLIGHT")
+            form = self._compact_form(group)
+            form.addRow(self.highlight_enabled)
+            form.addRow("Highlight Text", self.highlight_text)
+            form.addRow("Style", self.highlight_style)
+            form.addRow("Animation", self.highlight_animation)
+            return group
+
         def _sticker_group(self, button):
-            group = QGroupBox("5. STICKER")
+            group = QGroupBox("6. STICKER")
             form = self._compact_form(group)
             form.addRow(button)
             form.addRow("Scale", self.sticker_scale)

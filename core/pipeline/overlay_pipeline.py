@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from core.normalized_layout import NormalizedLayoutEngine
+from core.overlays.highlight_engine import HighlightEngine
 from core.overlays.sticker_engine import StickerEngine
 from core.overlays.text_engine import TextEngine
 from core.overlays.transform import OverlayTransform
@@ -13,6 +14,7 @@ class OverlayPipeline:
 
     def __init__(self) -> None:
         self.text_engine = TextEngine()
+        self.highlight_engine = HighlightEngine()
         self.sticker_engine = StickerEngine()
         self.layout = NormalizedLayoutEngine()
 
@@ -39,6 +41,29 @@ class OverlayPipeline:
                 graph.video_label,
                 f"{text_index}:v",
                 text_overlay,
+                suffix=f"_{index}",
+            )
+            graph.add_chain(chain, output)
+        for index, highlight_overlay in enumerate(overlays.highlight_overlays(), start=1):
+            asset_path = self.highlight_engine.render_asset(
+                highlight_overlay,
+                job.video_width,
+                job.video_height,
+                temp_files=graph.temp_files,
+            )
+            graph.debug_events.append(
+                f"[OVERLAY] highlight index={index} asset={asset_path.name} style={highlight_overlay.style} region=minimal_bbox"
+            )
+            graph.debug_events.append(self.layout.debug_font(highlight_overlay.effective_font_ratio(), job.video_height))
+            graph.debug_events.append(self.highlight_engine.motion.debug_summary(highlight_overlay.motion, highlight_overlay.start_time, highlight_overlay.end_time, highlight_overlay.motion_speed, highlight_overlay.motion_strength))
+            graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
+            if "-shortest" not in graph.extra_args:
+                graph.extra_args.append("-shortest")
+            highlight_index = sum(1 for token in graph.inputs if token == "-i")
+            chain, output = self.highlight_engine.build_filter(
+                graph.video_label,
+                f"{highlight_index}:v",
+                highlight_overlay,
                 suffix=f"_{index}",
             )
             graph.add_chain(chain, output)

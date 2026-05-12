@@ -136,6 +136,10 @@ if QMainWindow:
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.text_motion_speed.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.text_motion_strength.valueChanged.connect(lambda _value: self.update_text_preview())
+            self.workflow.highlight_enabled.toggled.connect(lambda _checked: (self.update_highlight_preview(), self.refresh_timeline()))
+            self.workflow.highlight_text.textChanged.connect(lambda: (self.update_highlight_preview(), self.refresh_timeline()))
+            self.workflow.highlight_style.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
+            self.workflow.highlight_animation.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
@@ -166,6 +170,7 @@ if QMainWindow:
             mode = self.workflow.selected_workflow_mode()
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
             self.update_text_preview()
+            self.update_highlight_preview()
             self.update_sticker_preview()
 
         def open_output_folder(self) -> None:
@@ -194,6 +199,7 @@ if QMainWindow:
         def set_sticker(self, path: str) -> None:
             self.state.overlays.sticker = StickerOverlay(path=Path(path))
             self.state.overlays.sticker.set_full_duration(self.video_duration)
+            self.update_highlight_preview()
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),
@@ -216,6 +222,9 @@ if QMainWindow:
             if kind == "text":
                 self.state.overlays.text.x = x
                 self.state.overlays.text.y = y
+            elif kind == "highlight":
+                self.state.overlays.highlight.x = x
+                self.state.overlays.highlight.y = y
             elif kind == "sticker":
                 self.state.overlays.sticker.x = x
                 self.state.overlays.sticker.y = y
@@ -241,6 +250,33 @@ if QMainWindow:
             self.preview.set_overlay_timing("text", self.state.overlays.text.start_time, self.state.overlays.text.end_time)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
 
+
+        def update_highlight_preview(self) -> None:
+            highlight = self.state.overlays.highlight
+            highlight.text = self.workflow.highlight_text.toPlainText().strip()
+            highlight.style = self.workflow.highlight_style.currentText()
+            highlight.set_animation_label(self.workflow.highlight_animation.currentText())
+            highlight.motion_speed = 1.35
+            highlight.motion_strength = 1.45
+            mode = self.workflow.selected_workflow_mode()
+            active = (
+                mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
+                and self.workflow.highlight_enabled.isChecked()
+                and highlight.active
+            )
+            self.state.overlays.highlight_enabled = active
+            self.preview.set_highlight_overlay(
+                highlight.text,
+                highlight.style,
+                highlight.effective_font_ratio(),
+                active,
+                highlight.motion.value,
+                highlight.motion_speed,
+                highlight.motion_strength,
+            )
+            self.preview.set_overlay_timing("highlight", highlight.start_time, highlight.end_time)
+            self.preview.set_overlay_position("highlight", highlight.x, highlight.y)
+
         def update_sticker_preview(self) -> None:
             mode = self.workflow.selected_workflow_mode()
             active = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and self.state.overlays.sticker.active
@@ -260,6 +296,7 @@ if QMainWindow:
             self.timeline.set_playhead_time(time_seconds)
             self.preview.set_playhead_time(time_seconds)
             self.update_text_preview()
+            self.update_highlight_preview()
             self.update_sticker_preview()
 
         def set_overlay_timing(self, key: str, start: float, end: float) -> None:
@@ -270,11 +307,14 @@ if QMainWindow:
             self.preview.set_overlay_timing(key, start, end)
             self.refresh_timeline()
             self.update_text_preview()
+            self.update_highlight_preview()
             self.update_sticker_preview()
 
         def select_overlay(self, key: str) -> None:
             if key == "text":
                 self.workflow.text.setFocus()
+            elif key == "highlight":
+                self.workflow.highlight_text.setFocus()
             elif key == "sticker":
                 self.workflow.sticker_scale.setFocus()
             self.status.showMessage(f"Selected overlay: {key}")
@@ -286,15 +326,21 @@ if QMainWindow:
             overlay.enabled = visible
             if key == "text":
                 self.state.overlays.text_enabled = visible and self.state.overlays.text.active
+            elif key == "highlight":
+                self.state.overlays.highlight_enabled = visible and self.state.overlays.highlight.active
+                self.workflow.highlight_enabled.setChecked(visible)
             elif key == "sticker":
                 self.state.overlays.sticker_enabled = visible and self.state.overlays.sticker.active
             self.update_text_preview()
+            self.update_highlight_preview()
             self.update_sticker_preview()
             self.refresh_timeline()
 
         def _overlay_by_key(self, key: str):
             if key == "text":
                 return self.state.overlays.text
+            if key == "highlight":
+                return self.state.overlays.highlight
             if key == "sticker":
                 return self.state.overlays.sticker
             return None
@@ -310,6 +356,17 @@ if QMainWindow:
                         self.state.overlays.text.start_time,
                         self.state.overlays.text.end_time,
                         self.state.overlays.text.enabled,
+                    )
+                )
+            if self.state.overlays.highlight.text.strip():
+                items.append(
+                    TimelineOverlayItem(
+                        "highlight",
+                        "highlight",
+                        "Highlight",
+                        self.state.overlays.highlight.start_time,
+                        self.state.overlays.highlight.end_time,
+                        self.state.overlays.highlight.enabled,
                     )
                 )
             if self.state.overlays.sticker.path is not None:
@@ -348,6 +405,8 @@ if QMainWindow:
             self.timeline.set_duration(self.video_duration)
             if not self.state.overlays.text.text.strip():
                 self.state.overlays.text.set_full_duration(self.video_duration)
+            if not self.state.overlays.highlight.text.strip():
+                self.state.overlays.highlight.set_full_duration(self.video_duration)
             if self.state.overlays.sticker.path is None:
                 self.state.overlays.sticker.set_full_duration(self.video_duration)
             self.refresh_timeline()
@@ -492,12 +551,14 @@ if QMainWindow:
             self.set_safe_area_options("TikTok", True, True)
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
+            self.state.overlays.highlight_enabled = overlay_pipeline and self.workflow.highlight_enabled.isChecked() and bool(self.state.overlays.highlight.text.strip())
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.set_font_size(self.workflow.font_size.value())
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
             self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)
+            self.update_highlight_preview()
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),

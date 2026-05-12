@@ -351,3 +351,14 @@ Motion logic now lives in `core/motion_engine.py` and is split into explicit sha
 Preview and export now share the same motion source of truth. The preview canvas evaluates opacity, scale, x/y offset, and rotate-float on every paint using the current playhead timestamp, while FFmpeg receives equivalent dynamic expressions. The overlay region-only architecture remains unchanged: text and sticker assets stay as minimal RGBA regions and are never expanded into full-frame overlay sequences.
 
 Text supports realtime preview for Fade In, Fade Out, Pop, Bounce, Pulse, Scale, Scale Up, and Scale Down. Stickers support the same transform classes plus Rotate Float. Motion speed and strength controls are now part of overlay state and affect both preview and output.
+
+## Smart Highlight System Update
+
+- Added an independent sales/CTA highlight text layer separate from main text and stickers.
+- Layer order is now: base video/image composite -> main text -> highlight text -> sticker (watermark slot remains reserved before text when implemented).
+- Highlight uses minimal RGBA region rendering through the shared Qt typography renderer and the same FFmpeg overlay/motion expression path as text; do not replace it with drawtext or full-frame RGBA overlays.
+- Highlight position is stored as normalized x/y coordinates and is moved by dragging the highlight region directly on the preview canvas.
+- Highlight style randomization may change style colors/box/border/glow presets only; it must never randomize position.
+- Sales wording presets live in `core/overlays/highlight_library.py`; highlight model state lives in `models/highlight_overlay.py`; export is handled by `core/overlays/highlight_engine.py`.
+- Remaining validation: visual QA with PySide6 + FFmpeg should compare preview/output for highlight styles, alpha, pop/bounce/pulse/shake/rotate motion, and drag-position parity.
+

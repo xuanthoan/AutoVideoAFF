@@ -381,3 +381,14 @@ Remaining validation required:
 - Real GUI playback validation through Mini Timeline play/pause.
 - Visual comparison between preview and rendered FFmpeg output.
 - Real transparent sticker tests for Fade In/Fade Out and Rotate Float.
+
+## Smart Highlight System Update
+
+- Added an independent sales/CTA highlight text layer separate from main text and stickers.
+- Layer order is now: base video/image composite -> main text -> highlight text -> sticker (watermark slot remains reserved before text when implemented).
+- Highlight uses minimal RGBA region rendering through the shared Qt typography renderer and the same FFmpeg overlay/motion expression path as text; do not replace it with drawtext or full-frame RGBA overlays.
+- Highlight position is stored as normalized x/y coordinates and is moved by dragging the highlight region directly on the preview canvas.
+- Highlight style randomization may change style colors/box/border/glow presets only; it must never randomize position.
+- Sales wording presets live in `core/overlays/highlight_library.py`; highlight model state lives in `models/highlight_overlay.py`; export is handled by `core/overlays/highlight_engine.py`.
+- Remaining validation: visual QA with PySide6 + FFmpeg should compare preview/output for highlight styles, alpha, pop/bounce/pulse/shake/rotate motion, and drag-position parity.
+

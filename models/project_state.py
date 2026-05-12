@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
+from .highlight_overlay import HighlightOverlay
 from .overlay import CropFocus
 from .sticker_overlay import StickerOverlay
 from .text_overlay import TextOverlay
@@ -100,16 +101,25 @@ class ImageCompositeSettings:
 @dataclass(slots=True)
 class OverlaySettings:
     text_enabled: bool = False
+    highlight_enabled: bool = False
     sticker_enabled: bool = False
     text: TextOverlay = field(default_factory=TextOverlay)
+    highlight: HighlightOverlay = field(default_factory=HighlightOverlay)
     sticker: StickerOverlay = field(default_factory=StickerOverlay)
     text_layers: list[TextOverlay] = field(default_factory=list)
+    highlight_layers: list[HighlightOverlay] = field(default_factory=list)
     sticker_layers: list[StickerOverlay] = field(default_factory=list)
 
     def text_overlays(self) -> list[TextOverlay]:
         layers = [overlay for overlay in self.text_layers if overlay.active]
         if self.text_enabled and self.text.active and self.text not in layers:
             layers.insert(0, self.text)
+        return layers[:20]
+
+    def highlight_overlays(self) -> list[HighlightOverlay]:
+        layers = [overlay for overlay in self.highlight_layers if overlay.active]
+        if self.highlight_enabled and self.highlight.active and self.highlight not in layers:
+            layers.insert(0, self.highlight)
         return layers[:20]
 
     def sticker_overlays(self) -> list[StickerOverlay]:
@@ -120,7 +130,7 @@ class OverlaySettings:
 
     @property
     def enabled(self) -> bool:
-        return bool(self.text_overlays() or self.sticker_overlays())
+        return bool(self.text_overlays() or self.highlight_overlays() or self.sticker_overlays())
 
 
 @dataclass(slots=True)

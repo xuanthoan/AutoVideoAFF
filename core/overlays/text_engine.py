@@ -12,12 +12,13 @@ from models.text_overlay import TextOverlay
 
 
 class TextEngine:
-    def __init__(self) -> None:
-        self.templates = TemplateManager()
+    def __init__(self, templates=None, prefix: str = "text") -> None:
+        self.templates = templates or TemplateManager()
+        self.prefix = prefix
         self.motion = MotionEngine()
         self.typography = SocialTypographyRenderer()
         self.layout = NormalizedLayoutEngine()
-        self._asset_cache: dict[tuple[str, str, int, int, int], Path] = {}
+        self._asset_cache: dict[tuple[str, str, float, int, int], Path] = {}
 
     def build_filter(
         self,
@@ -26,8 +27,8 @@ class TextEngine:
         overlay: TextOverlay,
         suffix: str = "",
     ) -> tuple[str, str]:
-        out = f"text_v{suffix}"
-        prepared = f"text_src{suffix}"
+        out = f"{self.prefix}_v{suffix}"
+        prepared = f"{self.prefix}_src{suffix}"
         x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time, overlay.motion_speed, overlay.motion_strength)
         width_expr, height_expr = self.motion.region_scale_expr("iw", overlay.motion, overlay.start_time, overlay.end_time, speed=overlay.motion_speed, strength=overlay.motion_strength)
         alpha_filter = self.motion.alpha_filter(overlay.motion, overlay.start_time, overlay.end_time, speed=overlay.motion_speed, strength=overlay.motion_strength)
@@ -44,9 +45,10 @@ class TextEngine:
         canvas_height: int,
         temp_files: list[Path] | None = None,
     ) -> Path:
-        template = self.templates.get(overlay.template)
+        template_name = getattr(overlay, "template", getattr(overlay, "style", ""))
+        template = self.templates.get(template_name)
         font_ratio = overlay.effective_font_ratio()
-        key = (overlay.text, overlay.template, round(font_ratio, 6), canvas_width, canvas_height)
+        key = (overlay.text, template_name, round(font_ratio, 6), canvas_width, canvas_height)
         path = self._asset_cache.get(key)
         if path is None or not path.exists():
             path = self._new_asset_path()

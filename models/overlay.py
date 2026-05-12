@@ -33,6 +33,14 @@ class MotionPreset(str, Enum):
 
     @classmethod
     def from_label(cls, label: str) -> "MotionPreset":
+        aliases = {
+            "Wiggle": cls.SHAKE,
+            "Zoom In": cls.SCALE_UP,
+            "Zoom Out": cls.SCALE_DOWN,
+            "Random Animation": cls.POP,
+        }
+        if label in aliases:
+            return aliases[label]
         for preset in cls:
             if preset.value == label:
                 return preset
