@@ -492,3 +492,15 @@ Still required in the next session:
 - Real render validation for every motion preset.
 - Visual preview/output parity checks.
 - Optional no-audio command fix remains critical and should be tackled next.
+
+## 19. Realtime Motion Preview Update — 2026-05-12
+
+A realtime preview/export motion parity pass has been added:
+
+- New `core/motion_engine.py` owns `MotionSpec`, numeric preview evaluation, and FFmpeg expression generation.
+- `core/overlays/motion_engine.py` is now only a compatibility wrapper.
+- Preview canvas evaluates motion on the current playhead timestamp and emits throttled `[PREVIEW_MOTION]` logs.
+- Text/sticker speed and strength controls affect both preview and export.
+- Region-only RGBA overlay pipeline remains unchanged.
+
+Next work: validate real GUI playback and rendered output, then fix optional no-audio rendering.

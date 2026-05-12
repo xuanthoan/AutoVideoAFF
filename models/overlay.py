@@ -48,6 +48,8 @@ class OverlayBase:
     end_time: float = 3.0
     duration: float = 3.0
     motion: MotionPreset = MotionPreset.NONE
+    motion_speed: float = 1.0
+    motion_strength: float = 1.0
 
     def set_timing(self, start_time: float, end_time: float) -> None:
         """Store a compact timeline timing range and derived duration."""

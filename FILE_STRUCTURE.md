@@ -305,3 +305,17 @@ The 2026-05-09 motion patch makes these files especially important:
 - `core/overlays/sticker_engine.py`: applies dynamic motion to sticker regions, including rotate-float.
 - `gui/preview_canvas.py`: live preview alpha/scale/offset/rotation using `MotionEngine`.
 - `gui/workflow_panel.py`: exposes the available motion presets in text/sticker dropdowns.
+
+## `core/motion_engine.py`
+
+Canonical shared motion module introduced for realtime preview/export parity.
+
+Contains:
+
+- `MotionSpec`
+- `MotionEvaluator`
+- `PreviewTransformEvaluator`
+- `FFmpegExpressionBuilder`
+- `MotionEngine` compatibility alias
+
+`core/overlays/motion_engine.py` is now a compatibility wrapper that re-exports the shared implementation.

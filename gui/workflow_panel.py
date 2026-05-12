@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 try:
-    from PySide6.QtCore import Signal
+    from PySide6.QtCore import Qt, Signal
     from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
     from PySide6.QtWidgets import (
         QButtonGroup,
@@ -17,15 +17,16 @@ try:
         QListWidget,
         QPushButton,
         QRadioButton,
+        QSlider,
         QSpinBox,
         QTextEdit,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:
-    Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
+    Qt = Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
     QButtonGroup = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
-    QGroupBox = QListWidget = QPushButton = QRadioButton = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
+    QGroupBox = QListWidget = QPushButton = QRadioButton = QSlider = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.overlays.template_manager import TemplateManager, TextTemplate
 from models.project_state import WorkflowMode
@@ -75,10 +76,14 @@ if QWidget:
             self._populate_template_combo()
             self.font_size = QSpinBox(); self.font_size.setRange(18, 260); self.font_size.setValue(96)
             self.motion = QComboBox(); self.motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake"])
+            self.text_motion_speed = self._motion_slider()
+            self.text_motion_strength = self._motion_slider()
 
             self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.05, 0.45); self.sticker_scale.setSingleStep(0.01); self.sticker_scale.setDecimals(2); self.sticker_scale.setValue(0.16); self.sticker_scale.setSuffix(" canvas")
             self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake", "Rotate Float"])
+            self.sticker_motion_speed = self._motion_slider()
+            self.sticker_motion_strength = self._motion_slider()
 
             sticker_button = QPushButton("Chọn sticker")
             image_button = QPushButton("Chọn ảnh (multi-select)")
@@ -89,6 +94,8 @@ if QWidget:
             self.sticker_scale.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
+            self.sticker_motion_speed.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.sticker_motion_strength.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.image_height.valueChanged.connect(lambda _value: self._clamp_overlap())
 
             layout = QVBoxLayout(self)
@@ -164,6 +171,17 @@ if QWidget:
             form.setHorizontalSpacing(8)
             return form
 
+        def _motion_slider(self) -> QSlider:
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(50, 200)
+            slider.setValue(100)
+            slider.setToolTip("100 = normal; 50 = slower/weaker; 200 = faster/stronger")
+            return slider
+
+        @staticmethod
+        def slider_ratio(slider: QSlider) -> float:
+            return max(0.05, float(slider.value()) / 100.0)
+
         def _pipeline_group(self):
             group = QGroupBox("1. PIPELINE")
             form = self._compact_form(group)
@@ -197,6 +215,8 @@ if QWidget:
             form.addRow("Template", self.template)
             form.addRow("Font", self.font_size)
             form.addRow("Motion", self.motion)
+            form.addRow("Speed", self.text_motion_speed)
+            form.addRow("Strength", self.text_motion_strength)
             return group
 
         def _sticker_group(self, button):
@@ -206,6 +226,8 @@ if QWidget:
             form.addRow("Scale", self.sticker_scale)
             form.addRow("Rotation", self.sticker_rotation)
             form.addRow("Motion", self.sticker_motion)
+            form.addRow("Speed", self.sticker_motion_speed)
+            form.addRow("Strength", self.sticker_motion_strength)
             return group
 
         def emit_sticker_controls(self) -> None:

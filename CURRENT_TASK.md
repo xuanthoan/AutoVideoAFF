@@ -185,3 +185,16 @@ Next task:
 
 - Validate the new motion filters with real FFmpeg renders.
 - Fix optional no-audio command handling next; it remains the highest unresolved runtime bug.
+
+## 11. Update After Realtime Motion Preview Patch — 2026-05-12
+
+Realtime motion preview has been implemented without changing the region-only RGBA pipeline.
+
+What changed:
+
+- Added `core/motion_engine.py` with `MotionSpec`, `MotionEvaluator`, `PreviewTransformEvaluator`, and `FFmpegExpressionBuilder`.
+- Preview canvas now evaluates motion transforms from the current playhead timestamp.
+- Text/sticker speed and strength controls now affect both preview and export.
+- `[PREVIEW_MOTION]` debug log messages are emitted for animated visible overlays.
+
+Next highest priority remains the optional no-audio render fix.

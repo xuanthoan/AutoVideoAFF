@@ -20,6 +20,7 @@ except ImportError:  # lets non-GUI CI import architecture modules without PySid
 if QLabel:
     class PreviewCanvas(QLabel):
         overlayMoved = Signal(str, float, float)
+        previewMotionDebug = Signal(str)
         SNAP_THRESHOLD = 10
 
         def __init__(self) -> None:
@@ -41,9 +42,10 @@ if QLabel:
             self._current_time = 0.0
             self._text_pixmap_cache_key = None
             self._text_pixmap_cache = None
+            self._last_motion_debug: dict[str, float] = {}
             self._overlays = {
-                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "motion": "None", "start": 0.0, "end": 3.0},
-                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "motion": "None", "start": 0.0, "end": 3.0},
+                "text": {"active": False, "x": 0.5, "y": 0.35, "w": 260, "h": 90, "text": "", "template": "Orange White", "font_size": 96, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
+                "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
             }
             self._drag_kind: str | None = None
 
@@ -64,18 +66,52 @@ if QLabel:
                 self._apply_scaled_pixmap()
             self.update()
 
-        def set_text_overlay(self, text: str, template: str, font_size: int, active: bool, motion: str = "None") -> None:
+        def set_text_overlay(
+            self,
+            text: str,
+            template: str,
+            font_size: int,
+            active: bool,
+            motion: str = "None",
+            motion_speed: float = 1.0,
+            motion_strength: float = 1.0,
+        ) -> None:
             data = self._overlays["text"]
-            data.update({"text": text, "template": template, "font_size": font_size, "active": active, "motion": motion})
+            data.update({
+                "text": text,
+                "template": template,
+                "font_size": font_size,
+                "active": active,
+                "motion": motion,
+                "motion_speed": motion_speed,
+                "motion_strength": motion_strength,
+            })
             self.update()
 
-        def set_sticker_overlay(self, path: Path | None, scale: float, rotation: float, active: bool, motion: str = "None") -> None:
+        def set_sticker_overlay(
+            self,
+            path: Path | None,
+            scale: float,
+            rotation: float,
+            active: bool,
+            motion: str = "None",
+            motion_speed: float = 1.0,
+            motion_strength: float = 1.0,
+        ) -> None:
             data = self._overlays["sticker"]
             pixmap = data.get("pixmap")
             if path is not None and (data.get("path") != path or pixmap is None):
                 pixmap = QPixmap(str(path))
                 data["path"] = path
-            data.update({"pixmap": pixmap, "scale": scale, "rotation": rotation, "motion": motion, "active": active and pixmap is not None and not pixmap.isNull()})
+            data.update({
+                "pixmap": pixmap,
+                "scale": scale,
+                "rotation": rotation,
+                "motion": motion,
+                "motion_speed": motion_speed,
+                "motion_strength": motion_strength,
+                "active": active and pixmap is not None and not pixmap.isNull(),
+            })
             self.update()
 
         def set_playhead_time(self, time_seconds: float) -> None:
@@ -182,16 +218,16 @@ if QLabel:
             pixmap = self._text_pixmap_cache
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
-            transformed, alpha = self._preview_transform(data, pixmap)
-            dx, dy = self._preview_offset(data, transformed, canvas)
+            transformed, transform = self._preview_transform(data, pixmap, canvas)
             center = QPointF(
-                canvas.left() + float(data["x"]) * canvas.width() + dx,
-                canvas.top() + float(data["y"]) * canvas.height() + dy,
+                canvas.left() + float(data["x"]) * canvas.width() + transform.x_offset,
+                canvas.top() + float(data["y"]) * canvas.height() + transform.y_offset,
             )
             painter.save()
-            painter.setOpacity(alpha)
+            painter.setOpacity(transform.opacity)
             painter.drawPixmap(QPointF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2), transformed)
             painter.restore()
+            self._emit_motion_debug("text", data, transform)
 
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]
@@ -206,19 +242,18 @@ if QLabel:
                 rotation=float(data["rotation"]),
             ).sticker_width_pixels(round(canvas.width()))
             scaled = pixmap.scaled(target_width, target_width, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            scaled, alpha = self._preview_transform(data, scaled)
+            scaled, transform = self._preview_transform(data, scaled, canvas)
             data["w"] = scaled.width()
             data["h"] = scaled.height()
             rect = self._overlay_rect("sticker")
-            dx, dy = self._preview_offset(data, scaled, canvas)
-            rotation_delta = self._preview_rotation_delta(data)
             painter.save()
-            center = QPointF(rect.center().x() + dx, rect.center().y() + dy)
+            center = QPointF(rect.center().x() + transform.x_offset, rect.center().y() + transform.y_offset)
             painter.translate(center)
-            painter.rotate(float(data["rotation"]) + rotation_delta)
-            painter.setOpacity(alpha)
+            painter.rotate(float(data["rotation"]) + transform.rotation_delta)
+            painter.setOpacity(transform.opacity)
             painter.drawPixmap(QPointF(-scaled.width() / 2, -scaled.height() / 2), scaled)
             painter.restore()
+            self._emit_motion_debug("sticker", data, transform)
 
         def _draw_safe_area(self, painter: QPainter) -> None:
             text_rect = self._safe_rect("text")
@@ -235,43 +270,44 @@ if QLabel:
             for zone in self._safe_area_engine.calculate(self.width(), self.height(), platform=self._safe_area_platform).ui_exclusion_zones:
                 painter.drawRect(self._rect_from_normalized(zone))
 
-        def _preview_transform(self, data: dict, pixmap: QPixmap) -> tuple[QPixmap, float]:
-            motion = str(data.get("motion", "None"))
-            start = float(data.get("start", 0.0))
-            end = float(data.get("end", start))
-            local_t = max(0.0, self._current_time - start)
-            duration = max(end - start, 0.0)
-            alpha = self._motion_engine.preview_alpha(motion, local_t, duration)
-            scale = self._motion_engine.preview_scale(motion, local_t, duration)
-            if abs(scale - 1.0) < 0.001:
-                return pixmap, alpha
-            return pixmap.scaled(
-                max(1, round(pixmap.width() * scale)),
-                max(1, round(pixmap.height() * scale)),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            ), alpha
-
-        def _preview_offset(self, data: dict, pixmap: QPixmap, canvas: QRectF) -> tuple[float, float]:
-            motion = str(data.get("motion", "None"))
-            start = float(data.get("start", 0.0))
-            local_t = max(0.0, self._current_time - start)
-            return self._motion_engine.preview_offset(
-                motion,
-                local_t,
+        def _preview_transform(self, data: dict, pixmap: QPixmap, canvas: QRectF):
+            transform = self._motion_engine.preview_transform(
+                str(data.get("motion", "None")),
+                self._current_time,
+                float(data.get("start", 0.0)),
+                float(data.get("end", 0.0)),
                 canvas.width(),
                 canvas.height(),
                 pixmap.width(),
                 pixmap.height(),
                 float(data.get("x", 0.5)),
                 float(data.get("y", 0.5)),
+                float(data.get("motion_speed", 1.0)),
+                float(data.get("motion_strength", 1.0)),
             )
+            if abs(transform.scale - 1.0) < 0.001:
+                return pixmap, transform
+            return pixmap.scaled(
+                max(1, round(pixmap.width() * transform.scale)),
+                max(1, round(pixmap.height() * transform.scale)),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            ), transform
 
-        def _preview_rotation_delta(self, data: dict) -> float:
+        def _emit_motion_debug(self, kind: str, data: dict, transform) -> None:
             motion = str(data.get("motion", "None"))
-            start = float(data.get("start", 0.0))
-            local_t = max(0.0, self._current_time - start)
-            return self._motion_engine.preview_rotation_delta(motion, local_t)
+            if motion == "None":
+                return
+            last_time = self._last_motion_debug.get(kind, -999.0)
+            if self._current_time - last_time < 0.5:
+                return
+            self._last_motion_debug[kind] = self._current_time
+            self.previewMotionDebug.emit(
+                f"[PREVIEW_MOTION] type={motion} layer={kind} time={self._current_time:.2f} "
+                f"x={float(data.get('x', 0.5)) + transform.x_offset / max(self._canvas_rect().width(), 1):.3f} "
+                f"y={float(data.get('y', 0.5)) + transform.y_offset / max(self._canvas_rect().height(), 1):.3f} "
+                f"scale={transform.scale:.3f} opacity={transform.opacity:.3f} rotation_delta={transform.rotation_delta:.2f}"
+            )
 
         def _overlay_visible(self, data: dict) -> bool:
             return bool(data["active"]) and float(data.get("start", 0.0)) <= self._current_time <= float(data.get("end", 0.0))

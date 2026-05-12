@@ -175,3 +175,14 @@ Status changes:
 - Motion architecture: improved but needs real FFmpeg render validation.
 - Fade/Pop/Scale: command-generation behavior improved; visual QA still required.
 - No-audio handling: still open and should remain the next highest priority.
+
+## 8. Update — Realtime Motion Preview 2026-05-12
+
+Realtime motion preview has been implemented at the architecture/code level.
+
+Status changes:
+
+- Motion preview: now uses shared evaluator and current playhead timestamp.
+- Motion speed/strength: now stored in overlay state and passed to export expressions.
+- Motion QA: still requires real GUI playback and FFmpeg render comparison.
+- No-audio handling: still open and remains the next critical fix.

@@ -240,3 +240,19 @@ Validation still required:
 - Verify transparent sticker edges remain clean during fade.
 
 If failures remain, start with `core/overlays/motion_engine.py` and inspect generated FFmpeg expressions.
+
+## Realtime Motion Preview Status
+
+Status: first implementation added on 2026-05-12.
+
+What is improved:
+
+- Preview and export route through shared motion classes.
+- Motion speed/strength affect both preview and output filter expressions.
+- Preview emits throttled `[PREVIEW_MOTION]` debug log messages.
+
+Still needs validation:
+
+- Real GUI playback at 30fps-like timer rate.
+- Rendered FFmpeg output comparison for all presets.
+- Performance check with multiple overlay layers active.

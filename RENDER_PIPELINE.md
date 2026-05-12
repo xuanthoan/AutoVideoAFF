@@ -300,3 +300,21 @@ Expected filter order for each overlay region:
 5. Overlay onto the current final-canvas label with timing `enable='between(t,start,end)'`.
 
 This keeps motion lightweight and avoids full-frame RGBA animation sequences.
+
+## 17. Realtime Motion Preview / Export Parity — 2026-05-12
+
+Motion transform generation is now shared between preview and export through `core/motion_engine.py`.
+
+Preview path:
+
+1. Mini Timeline advances the playhead timestamp.
+2. Preview canvas requests a `PreviewTransform` for each visible overlay.
+3. The canvas applies opacity, scale, x/y offset, and rotation delta to the region pixmap.
+
+Export path:
+
+1. Text/sticker engines pass the same preset, start/end, speed, and strength into `FFmpegExpressionBuilder`.
+2. The builder generates dynamic FFmpeg expressions.
+3. FFmpeg composites the transformed region onto the final canvas.
+
+No full-frame overlay stage is introduced.

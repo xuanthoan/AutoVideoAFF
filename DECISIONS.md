@@ -253,3 +253,14 @@ Rules:
 - Preview canvas should call `MotionEngine` helper methods instead of hardcoding separate animation math.
 - Animated scale must use region transforms, not regenerated PNG assets.
 - Fade must animate RGBA overlay alpha after asset creation.
+
+## 19. Shared Realtime Motion Evaluator
+
+Decision: realtime preview and FFmpeg export must use the shared motion evaluator in `core/motion_engine.py`.
+
+Rules:
+
+- `MotionSpec` is the shared data contract.
+- Preview uses numeric transform evaluation.
+- Export uses FFmpeg expression generation from the same timing/speed/strength model.
+- Motion preview must not require full render and must not use full-frame RGBA overlay canvases.

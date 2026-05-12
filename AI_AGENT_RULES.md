@@ -173,3 +173,15 @@ Rules:
 - Keep scale animation in FFmpeg `scale=...:eval=frame`.
 - Keep fade as alpha animation on RGBA overlay streams.
 - Keep preview transforms routed through the same motion helper formulas.
+
+## 15. Realtime Motion Preview Rule
+
+After the 2026-05-12 realtime motion update, preview and export motion must both route through `core/motion_engine.py`.
+
+Rules:
+
+- Use `MotionSpec` for timing, speed, strength, and selected preset.
+- Use `PreviewTransformEvaluator` for live preview transforms.
+- Use `FFmpegExpressionBuilder` for export filter expressions.
+- Do not reintroduce separate preview-only formulas in `gui/preview_canvas.py`.
+- Do not replace region-only overlay animation with full-frame RGBA canvases.

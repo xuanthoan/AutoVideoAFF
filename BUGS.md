@@ -366,3 +366,18 @@ Remaining validation required:
 - Run real FFmpeg renders for text/sticker Fade In, Fade Out, Pop, Scale, Pulse, Float, Shake, and slides.
 - Confirm sticker Fade In preserves transparent PNG edges and does not disappear.
 - Confirm preview/output parity visually on Windows.
+
+## Recently Addressed — Realtime Motion Preview 2026-05-12
+
+The preview/export split for motion has been addressed with a shared `core/motion_engine.py` module:
+
+- `MotionSpec` stores timing, speed, strength, and preset.
+- `PreviewTransformEvaluator` drives live preview opacity/scale/offset/rotation.
+- `FFmpegExpressionBuilder` drives export expressions.
+- Motion speed/strength values are stored on overlay models and passed to both preview and export.
+
+Remaining validation required:
+
+- Real GUI playback validation through Mini Timeline play/pause.
+- Visual comparison between preview and rendered FFmpeg output.
+- Real transparent sticker tests for Fade In/Fade Out and Rotate Float.

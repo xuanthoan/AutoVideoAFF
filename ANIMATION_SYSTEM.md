@@ -338,3 +338,16 @@ Implemented/updated behavior:
 Important implementation rule:
 
 - Do not bake animation into generated PNGs. Text/sticker assets remain immutable minimal regions; FFmpeg and preview transforms animate those regions over time.
+
+## 2026-05-12 Realtime Motion Preview Update
+
+Motion logic now lives in `core/motion_engine.py` and is split into explicit shared components:
+
+- `MotionSpec`: resolved preset, timing, speed, strength, and default motion durations.
+- `MotionEvaluator`: numeric easing/opacity/scale/offset/rotation evaluation.
+- `PreviewTransformEvaluator`: evaluates realtime preview transform values for the current playhead timestamp.
+- `FFmpegExpressionBuilder`: builds matching FFmpeg expressions for final export.
+
+Preview and export now share the same motion source of truth. The preview canvas evaluates opacity, scale, x/y offset, and rotate-float on every paint using the current playhead timestamp, while FFmpeg receives equivalent dynamic expressions. The overlay region-only architecture remains unchanged: text and sticker assets stay as minimal RGBA regions and are never expanded into full-frame overlay sequences.
+
+Text supports realtime preview for Fade In, Fade Out, Pop, Bounce, Pulse, Scale, Scale Up, and Scale Down. Stickers support the same transform classes plus Rotate Float. Motion speed and strength controls are now part of overlay state and affect both preview and output.

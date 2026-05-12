@@ -277,3 +277,9 @@ Overlay motion now follows a stricter two-stage model:
 2. Apply alpha, scale, translation, and rotation motion to that region during final-canvas compositing.
 
 The shared `MotionEngine` is the source of truth for FFmpeg expressions and preview helper calculations. Text and sticker overlays should not implement separate ad-hoc motion formulas.
+
+## 18. Realtime Motion Preview Update — 2026-05-12
+
+`core/motion_engine.py` is now the canonical motion module for both preview and FFmpeg export. It contains `MotionSpec`, `MotionEvaluator`, `PreviewTransformEvaluator`, and `FFmpegExpressionBuilder`.
+
+The existing region-only overlay pipeline is preserved. Text/sticker assets are still minimal RGBA regions; only transform, opacity, geometry, and rotation are updated during preview and export. The preview canvas uses the current mini-timeline playhead timestamp to evaluate motion and emits throttled `[PREVIEW_MOTION]` logs for visible animated overlays.

@@ -129,7 +129,10 @@ if QMainWindow:
             self.workflow.template.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.font_size.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
+            self.workflow.text_motion_speed.valueChanged.connect(lambda _value: self.update_text_preview())
+            self.workflow.text_motion_strength.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.changed.connect(self.sync_preview_panel_state)
+            self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
             self.timeline.playheadChanged.connect(self.set_playhead_time)
             self.timeline.overlayTimingChanged.connect(self.set_overlay_timing)
@@ -192,6 +195,8 @@ if QMainWindow:
             self.state.overlays.sticker.scale = scale
             self.state.overlays.sticker.rotation = rotation
             self.state.overlays.sticker.motion = MotionPreset.from_label(motion)
+            self.state.overlays.sticker.motion_speed = self.workflow.slider_ratio(self.workflow.sticker_motion_speed)
+            self.state.overlays.sticker.motion_strength = self.workflow.slider_ratio(self.workflow.sticker_motion_strength)
             self.update_sticker_preview()
 
         def set_overlay_position(self, kind: str, x: float, y: float) -> None:
@@ -207,6 +212,8 @@ if QMainWindow:
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
+            self.state.overlays.text.motion_speed = self.workflow.slider_ratio(self.workflow.text_motion_speed)
+            self.state.overlays.text.motion_strength = self.workflow.slider_ratio(self.workflow.text_motion_strength)
             mode = self.workflow.selected_workflow_mode()
             active = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and self.state.overlays.text.active
             self.preview.set_text_overlay(
@@ -215,6 +222,8 @@ if QMainWindow:
                 self.state.overlays.text.font_size,
                 active,
                 self.state.overlays.text.motion.value,
+                self.state.overlays.text.motion_speed,
+                self.state.overlays.text.motion_strength,
             )
             self.preview.set_overlay_timing("text", self.state.overlays.text.start_time, self.state.overlays.text.end_time)
             self.preview.set_overlay_position("text", self.state.overlays.text.x, self.state.overlays.text.y)
@@ -228,6 +237,8 @@ if QMainWindow:
                 self.state.overlays.sticker.rotation,
                 active,
                 self.state.overlays.sticker.motion.value,
+                self.state.overlays.sticker.motion_speed,
+                self.state.overlays.sticker.motion_strength,
             )
             self.preview.set_overlay_timing("sticker", self.state.overlays.sticker.start_time, self.state.overlays.sticker.end_time)
             self.preview.set_overlay_position("sticker", self.state.overlays.sticker.x, self.state.overlays.sticker.y)
@@ -360,6 +371,8 @@ if QMainWindow:
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
+            self.state.overlays.text.motion_speed = self.workflow.slider_ratio(self.workflow.text_motion_speed)
+            self.state.overlays.text.motion_strength = self.workflow.slider_ratio(self.workflow.text_motion_strength)
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
                 float(self.workflow.sticker_rotation.value()),

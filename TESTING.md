@@ -250,3 +250,18 @@ A command-level smoke test should assert:
 - Sticker Rotate Float uses a dynamic `rotate='<expr>'` expression.
 
 Manual render validation is still required for visual quality and preview/output parity.
+
+## 9. Realtime Motion Preview Tests Added/Required
+
+Command-level tests should verify:
+
+- `MotionSpec` exists and carries speed/strength.
+- `PreviewTransformEvaluator.evaluate()` returns changing scale/opacity/offset values over time.
+- `FFmpegExpressionBuilder` includes speed/strength values in dynamic expressions when non-default.
+- Text/sticker filters pass overlay speed/strength into motion expressions.
+
+Manual GUI tests should verify:
+
+- Pressing Play on the Mini Timeline animates visible text/sticker overlays in preview.
+- `[PREVIEW_MOTION]` logs appear for active animated overlays without flooding the log box.
+- Preview motion visually matches rendered output for Fade, Pop, Bounce, Pulse, Scale, and Rotate Float.
