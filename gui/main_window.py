@@ -2,24 +2,28 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 
 try:
     from PySide6.QtCore import Qt, QThread, QUrl, Signal
     from PySide6.QtGui import QDesktopServices
-    from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
 except ImportError:
-    Qt = QThread = QUrl = Signal = QDesktopServices = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
+    Qt = QThread = QUrl = Signal = QDesktopServices = QFileDialog = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
+from core.pipeline.shuffle_pipeline import SceneShufflePipeline
 from core.renderer.batch_renderer import BatchRenderer
 from core.renderer.preview_renderer import PreviewRenderer
-from gui.mini_timeline import MiniTimeline, TimelineOverlayItem
+from core.video.scene_detector import SceneDetector
+from core.video.segmenter import Segmenter
+from gui.mini_timeline import MiniTimeline, SegmentTimelineItem, TimelineOverlayItem
 from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
 from models.overlay import MotionPreset
-from models.project_state import ProjectState, WorkflowMode
+from models.project_state import ProjectState, TimelineSegment, WorkflowMode
 from models.sticker_overlay import StickerOverlay
 from utils.ffmpeg_helper import FFmpegNotFoundError, probe_duration
 from utils.file_helper import output_directory_for_videos
@@ -62,6 +66,7 @@ if QMainWindow:
             self.preview = PreviewCanvas()
             self.timeline = MiniTimeline()
             self.video_duration = 6.0
+            self.current_video_path: Path | None = None
             self.workflow = WorkflowPanel()
             self.export_button = QPushButton(self.state.render_count_label())
             self.stop_button = QPushButton("Stop")
@@ -138,6 +143,14 @@ if QMainWindow:
             self.timeline.overlayTimingChanged.connect(self.set_overlay_timing)
             self.timeline.overlaySelected.connect(self.select_overlay)
             self.timeline.overlayVisibilityChanged.connect(self.set_overlay_visibility)
+            self.timeline.generateAutoSegmentsRequested.connect(self.generate_auto_segments)
+            self.timeline.addCutRequested.connect(self.add_cut_at_time)
+            self.timeline.previewShuffleOrderRequested.connect(self.preview_shuffle_order)
+            self.timeline.saveTimelineRequested.connect(self.save_timeline)
+            self.timeline.loadTimelineRequested.connect(self.load_timeline)
+            self.timeline.segmentEnabledChanged.connect(self.set_segment_enabled)
+            self.timeline.segmentLockedChanged.connect(self.set_segment_locked)
+            self.timeline.removeSegmentRequested.connect(self.remove_segment)
             self.export_button.clicked.connect(self.render)
             self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
@@ -311,6 +324,7 @@ if QMainWindow:
                     )
                 )
             self.timeline.set_duration(self.video_duration)
+            self.timeline.set_segments(self._timeline_segment_items())
             self.timeline.set_items(items)
 
         def set_text(self, text: str) -> None:
@@ -325,6 +339,7 @@ if QMainWindow:
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
 
         def set_video_duration(self, video_path: Path) -> None:
+            self.current_video_path = video_path
             try:
                 self.video_duration = max(0.1, probe_duration(video_path))
             except (FFmpegNotFoundError, KeyError, ValueError, OSError) as exc:
@@ -336,6 +351,116 @@ if QMainWindow:
             if self.state.overlays.sticker.path is None:
                 self.state.overlays.sticker.set_full_duration(self.video_duration)
             self.refresh_timeline()
+
+
+        def _timeline_segments(self) -> list[TimelineSegment]:
+            segment_path = self.state.scene_shuffle.segment_video_path
+            if segment_path and self.current_video_path and segment_path != str(self.current_video_path):
+                return [TimelineSegment(0.0, self.video_duration, source="auto", enabled=True, locked=False)]
+            segments = self.state.scene_shuffle.active_segments()
+            if segments:
+                return [segment.normalized(self.video_duration) for segment in segments]
+            return [TimelineSegment(0.0, self.video_duration, source="auto", enabled=True, locked=False)]
+
+        def _timeline_segment_items(self) -> list[SegmentTimelineItem]:
+            return [
+                SegmentTimelineItem(segment.start_time, segment.end_time, segment.source, segment.enabled, segment.locked)
+                for segment in self._timeline_segments()
+            ]
+
+        def _activate_manual_segments(self) -> list[TimelineSegment]:
+            if not self.state.scene_shuffle.manual_segments:
+                self.state.scene_shuffle.manual_segments = [
+                    TimelineSegment(segment.start_time, segment.end_time, "manual", segment.enabled, segment.locked)
+                    for segment in self._timeline_segments()
+                ]
+                self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else None
+            return self.state.scene_shuffle.manual_segments
+
+        def generate_auto_segments(self) -> None:
+            if self.current_video_path is None:
+                self.append_log("[WARNING] Chọn video trước khi Generate Auto Segments.")
+                return
+            detected = SceneDetector().detect(self.current_video_path, float(self.workflow.scene_sensitivity.value()))
+            ensured = Segmenter(float(self.workflow.fallback_min.value()), float(self.workflow.fallback_max.value())).ensure_segments(
+                detected, self.current_video_path
+            )
+            self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="auto") for item in ensured]
+            self.state.scene_shuffle.manual_segments = []
+            self.state.scene_shuffle.segment_video_path = str(self.current_video_path)
+            self.refresh_timeline()
+            self.append_log(f"[SEGMENTS] Generated {len(self.state.scene_shuffle.auto_segments)} auto segments for current video.")
+
+        def add_cut_at_time(self, time_seconds: float) -> None:
+            cut = min(max(float(time_seconds), 0.0), self.video_duration)
+            segments = self._activate_manual_segments()
+            for index, segment in enumerate(list(segments)):
+                if segment.start_time + 0.05 < cut < segment.end_time - 0.05:
+                    locked = segment.locked
+                    enabled = segment.enabled
+                    segments[index:index + 1] = [
+                        TimelineSegment(segment.start_time, cut, "manual", enabled, locked),
+                        TimelineSegment(cut, segment.end_time, "manual", enabled, locked),
+                    ]
+                    self.refresh_timeline()
+                    self.append_log(f"[SEGMENTS] Add Cut at {cut:.2f}s -> manual segment mode active.")
+                    return
+            self.append_log(f"[WARNING] Không thể add cut tại {cut:.2f}s (quá sát boundary).")
+
+        def set_segment_enabled(self, row: int, enabled: bool) -> None:
+            segments = self._activate_manual_segments()
+            if 0 <= row < len(segments):
+                segments[row].enabled = bool(enabled)
+                segments[row].source = "manual"
+                self.refresh_timeline()
+                self.append_log(f"[SEGMENTS] Segment {row + 1} enabled={enabled}; manual segment mode active.")
+
+        def set_segment_locked(self, row: int, locked: bool) -> None:
+            segments = self._activate_manual_segments()
+            if 0 <= row < len(segments):
+                segments[row].locked = bool(locked)
+                segments[row].source = "manual"
+                self.refresh_timeline()
+                self.append_log(f"[SEGMENTS] Segment {row + 1} locked={locked}; manual segment mode active.")
+
+        def remove_segment(self, row: int) -> None:
+            segments = self._activate_manual_segments()
+            if 0 <= row < len(segments):
+                removed = segments.pop(row)
+                self.refresh_timeline()
+                self.append_log(f"[SEGMENTS] Removed segment {row + 1} ({removed.start_time:.2f}-{removed.end_time:.2f}); manual segment mode active.")
+
+        def preview_shuffle_order(self) -> None:
+            segments = [segment for segment in self._timeline_segments() if segment.enabled]
+            ordered = SceneShufflePipeline(random=None)._shuffle_segments(
+                segments, True, self.state.scene_shuffle.keep_first_segment
+            )
+            order = ", ".join(f"{segment.start_time:.2f}-{segment.end_time:.2f}" for segment in ordered)
+            self.append_log(f"[SEGMENTS] Preview Shuffle Order: {order}")
+
+        def save_timeline(self) -> None:
+            path, _ = QFileDialog.getSaveFileName(self, "Save Timeline", "timeline_segments.json", "JSON (*.json)")
+            if not path:
+                return
+            payload = {
+                "video": str(self.current_video_path) if self.current_video_path else None,
+                "segments": [segment.to_json() for segment in self._timeline_segments()],
+            }
+            Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            self.append_log(f"[SEGMENTS] Saved timeline: {path}")
+
+        def load_timeline(self) -> None:
+            path, _ = QFileDialog.getOpenFileName(self, "Load Timeline", "", "JSON (*.json)")
+            if not path:
+                return
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.state.scene_shuffle.manual_segments = [
+                TimelineSegment.from_json(item, default_source="manual").normalized(self.video_duration)
+                for item in payload.get("segments", [])
+            ]
+            self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else payload.get("video")
+            self.refresh_timeline()
+            self.append_log(f"[SEGMENTS] Loaded {len(self.state.scene_shuffle.manual_segments)} manual segments: {path}")
 
         def update_preview(self, video_path: Path) -> None:
             if not video_path.exists():

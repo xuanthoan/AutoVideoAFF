@@ -25,6 +25,19 @@ class TimelineOverlayItem:
         return max(0.0, self.end - self.start)
 
 
+@dataclass(slots=True)
+class SegmentTimelineItem:
+    start: float
+    end: float
+    source: str = "auto"
+    enabled: bool = True
+    locked: bool = False
+
+    @property
+    def duration(self) -> float:
+        return max(0.0, self.end - self.start)
+
+
 if QWidget:
     class MiniTimelineTracks(QWidget):
         playheadChanged = Signal(float)
@@ -46,7 +59,9 @@ if QWidget:
             self.setMouseTracking(True)
             self.setStyleSheet("background:#151515;border:1px solid #303030;border-radius:6px;")
             self.items: list[TimelineOverlayItem] = []
+            self.segments: list[SegmentTimelineItem] = []
             self.video_duration = 6.0
+            self.zoom_factor = 1.0
             self.playhead_time = 0.0
             self.selected_key: str | None = None
             self._mode: str | None = None
@@ -57,6 +72,14 @@ if QWidget:
             self.items = items[:20]
             if self.selected_key not in {item.key for item in self.items}:
                 self.selected_key = self.items[0].key if self.items else None
+            self.update()
+
+        def set_segments(self, segments: list[SegmentTimelineItem]) -> None:
+            self.segments = segments[:200]
+            self.update()
+
+        def set_zoom(self, zoom_factor: float) -> None:
+            self.zoom_factor = min(max(float(zoom_factor), 1.0), 8.0)
             self.update()
 
         def set_duration(self, duration: float) -> None:
@@ -78,7 +101,8 @@ if QWidget:
             painter.setRenderHint(QPainter.Antialiasing)
             area = self._track_area_width()
             painter.setPen(QColor("#737373"))
-            painter.drawText(8, 17, "PLAYHEAD")
+            painter.drawText(8, 17, "SEGMENTS")
+            self._draw_segments(painter)
             for idx, item in enumerate(self.items):
                 y = self._row_y(idx)
                 painter.setPen(QColor("#a8a8a8" if item.visible else "#666"))
@@ -96,6 +120,28 @@ if QWidget:
             x = self._time_to_x(self.playhead_time)
             painter.setPen(QPen(QColor("#ffffff"), 2))
             painter.drawLine(int(x), 0, int(x), self.height())
+
+        def wheelEvent(self, event):
+            if event.modifiers() & Qt.ControlModifier:
+                step = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
+                self.set_zoom(self.zoom_factor * step)
+                return
+            return super().wheelEvent(event)
+
+        def _draw_segments(self, painter: QPainter) -> None:
+            y = 4
+            h = 16
+            for segment in self.segments:
+                start_x = self._time_to_x(segment.start)
+                end_x = self._time_to_x(segment.end)
+                rect = QRectF(start_x, y, max(4, end_x - start_x), h)
+                color = QColor("#4cc46b" if segment.source == "auto" else "#d8a13c")
+                color.setAlpha(210 if segment.enabled else 70)
+                painter.setBrush(color)
+                painter.setPen(QPen(QColor("#f6f6f6") if segment.locked else QColor("#202020"), 1))
+                painter.drawRoundedRect(rect, 3, 3)
+                painter.setPen(QColor("#101010"))
+                painter.drawText(rect.adjusted(4, 0, -2, 0), Qt.AlignVCenter | Qt.AlignLeft, segment.source.upper())
 
         def mousePressEvent(self, event):
             if event.button() != Qt.LeftButton:
@@ -186,7 +232,7 @@ if QWidget:
             return QRectF(start_x, self._row_y(index), max(8, end_x - start_x), self.TRACK_HEIGHT)
 
         def _track_area_width(self) -> float:
-            return max(1.0, self.width() - self.LEFT_GUTTER - self.RIGHT_PAD)
+            return max(1.0, self.width() - self.LEFT_GUTTER - self.RIGHT_PAD) * self.zoom_factor
 
         def _time_to_x(self, time_seconds: float) -> float:
             return self.LEFT_GUTTER + (min(max(time_seconds, 0.0), self.video_duration) / self.video_duration) * self._track_area_width()
@@ -201,6 +247,14 @@ if QWidget:
         overlayTimingChanged = Signal(str, float, float)
         overlaySelected = Signal(str)
         overlayVisibilityChanged = Signal(str, bool)
+        generateAutoSegmentsRequested = Signal()
+        addCutRequested = Signal(float)
+        previewShuffleOrderRequested = Signal()
+        saveTimelineRequested = Signal()
+        loadTimelineRequested = Signal()
+        segmentEnabledChanged = Signal(int, bool)
+        segmentLockedChanged = Signal(int, bool)
+        removeSegmentRequested = Signal(int)
 
         def __init__(self) -> None:
             super().__init__()
@@ -212,9 +266,17 @@ if QWidget:
             self.play_button = QPushButton("Play")
             self.pause_button = QPushButton("Pause")
             self.stop_button = QPushButton("Stop")
+            self.generate_segments_button = QPushButton("Generate Auto Segments")
+            self.add_cut_button = QPushButton("Add Cut")
+            self.preview_order_button = QPushButton("Preview Shuffle Order")
+            self.save_timeline_button = QPushButton("Save Timeline")
+            self.load_timeline_button = QPushButton("Load Timeline")
             self.time_label = QLabel("00:00.00 / 00:06.00")
             self.overlay_list = QListWidget()
             self.overlay_list.setMaximumWidth(120)
+            self.segment_list = QListWidget()
+            self.segment_list.setMinimumWidth(260)
+            self.segment_list.setToolTip("# | Start | End | Duration | Lock | Enable | Type")
             self.tracks = MiniTimelineTracks()
             self.timer = QTimer(self)
             self.timer.setInterval(33)
@@ -224,6 +286,11 @@ if QWidget:
             controls.addWidget(self.play_button)
             controls.addWidget(self.pause_button)
             controls.addWidget(self.stop_button)
+            controls.addWidget(self.generate_segments_button)
+            controls.addWidget(self.add_cut_button)
+            controls.addWidget(self.preview_order_button)
+            controls.addWidget(self.save_timeline_button)
+            controls.addWidget(self.load_timeline_button)
             controls.addWidget(self.time_label)
             controls.addStretch()
             left = QVBoxLayout()
@@ -235,10 +302,16 @@ if QWidget:
             layout.setContentsMargins(6, 4, 6, 4)
             layout.setSpacing(6)
             layout.addLayout(left, 1)
+            layout.addWidget(self.segment_list, 0)
             layout.addWidget(self.overlay_list, 0)
             self.play_button.clicked.connect(self.play)
             self.pause_button.clicked.connect(self.pause)
             self.stop_button.clicked.connect(self.stop)
+            self.generate_segments_button.clicked.connect(self.generateAutoSegmentsRequested.emit)
+            self.add_cut_button.clicked.connect(lambda: self.addCutRequested.emit(self.current_time))
+            self.preview_order_button.clicked.connect(self.previewShuffleOrderRequested.emit)
+            self.save_timeline_button.clicked.connect(self.saveTimelineRequested.emit)
+            self.load_timeline_button.clicked.connect(self.loadTimelineRequested.emit)
             self.timer.timeout.connect(self._tick)
             self.tracks.playheadChanged.connect(self.set_playhead_time)
             self.tracks.playheadChanged.connect(self.playheadChanged.emit)
@@ -246,6 +319,19 @@ if QWidget:
             self.tracks.overlaySelected.connect(self._select_from_tracks)
             self.overlay_list.currentRowChanged.connect(self._select_from_list)
             self.overlay_list.itemChanged.connect(self._visibility_from_list)
+            self.segment_list.itemChanged.connect(self._segment_flags_from_list)
+            self.segment_list.itemDoubleClicked.connect(self._toggle_segment_lock)
+
+        def set_segments(self, segments: list[SegmentTimelineItem]) -> None:
+            self.segment_list.blockSignals(True)
+            self.segment_list.clear()
+            for index, segment in enumerate(segments, start=1):
+                row_item = QListWidgetItem(self._segment_label(index, segment))
+                row_item.setFlags(row_item.flags() | Qt.ItemIsUserCheckable)
+                row_item.setCheckState(Qt.Checked if segment.enabled else Qt.Unchecked)
+                self.segment_list.addItem(row_item)
+            self.segment_list.blockSignals(False)
+            self.tracks.set_segments(segments)
 
         def set_items(self, items: list[TimelineOverlayItem]) -> None:
             self.overlay_list.blockSignals(True)
@@ -311,6 +397,51 @@ if QWidget:
                 timeline_item.visible = item.checkState() == Qt.Checked
                 self.tracks.update()
                 self.overlayVisibilityChanged.emit(timeline_item.key, timeline_item.visible)
+
+        def _segment_flags_from_list(self, item: QListWidgetItem) -> None:
+            row = self.segment_list.row(item)
+            if 0 <= row < len(self.tracks.segments):
+                enabled = item.checkState() == Qt.Checked
+                self.tracks.segments[row].enabled = enabled
+                self.tracks.update()
+                self.segmentEnabledChanged.emit(row, enabled)
+
+        def _toggle_segment_lock(self, item: QListWidgetItem) -> None:
+            row = self.segment_list.row(item)
+            if 0 <= row < len(self.tracks.segments):
+                locked = not self.tracks.segments[row].locked
+                self.tracks.segments[row].locked = locked
+                item.setText(self._segment_label(row + 1, self.tracks.segments[row]))
+                self.tracks.update()
+                self.segmentLockedChanged.emit(row, locked)
+
+        def keyPressEvent(self, event):
+            if event.key() == Qt.Key_Space:
+                self.pause() if self.timer.isActive() else self.play()
+                return
+            if event.key() == Qt.Key_Left:
+                self.set_playhead_time(max(0.0, self.current_time - 1 / 30))
+                self.playheadChanged.emit(self.current_time)
+                return
+            if event.key() == Qt.Key_Right:
+                self.set_playhead_time(min(self.video_duration, self.current_time + 1 / 30))
+                self.playheadChanged.emit(self.current_time)
+                return
+            if event.key() == Qt.Key_C:
+                self.addCutRequested.emit(self.current_time)
+                return
+            if event.key() == Qt.Key_Delete:
+                row = self.segment_list.currentRow()
+                if row >= 0:
+                    self.removeSegmentRequested.emit(row)
+                return
+            return super().keyPressEvent(event)
+
+        @staticmethod
+        def _segment_label(index: int, segment: SegmentTimelineItem) -> str:
+            lock = "🔒" if segment.locked else "☐"
+            enabled = "☑" if segment.enabled else "☐"
+            return f"{index} | {segment.start:.2f} | {segment.end:.2f} | {segment.duration:.2f} | {lock} | {enabled} | {segment.source.upper()}"
 
         @staticmethod
         def _format_time(seconds: float) -> str:

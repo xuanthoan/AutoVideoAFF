@@ -16,6 +16,48 @@ FadeCurve = Literal["linear", "smooth", "strong"]
 
 PlatformPreset = Literal["TikTok", "Instagram Reels", "YouTube Shorts", "Custom"]
 
+SegmentSource = Literal["auto", "manual"]
+
+
+@dataclass(slots=True)
+class TimelineSegment:
+    start_time: float
+    end_time: float
+    source: SegmentSource = "auto"
+    enabled: bool = True
+    locked: bool = False
+
+    @property
+    def duration(self) -> float:
+        return max(0.0, self.end_time - self.start_time)
+
+    def normalized(self, video_duration: float | None = None) -> "TimelineSegment":
+        start = max(0.0, float(self.start_time))
+        end_limit = float(video_duration) if video_duration is not None else None
+        end = max(start + 0.05, float(self.end_time))
+        if end_limit is not None:
+            end = min(end, max(start + 0.05, end_limit))
+        return TimelineSegment(start, end, self.source, bool(self.enabled), bool(self.locked))
+
+    def to_json(self) -> dict:
+        return {
+            "start": round(float(self.start_time), 3),
+            "end": round(float(self.end_time), 3),
+            "source": self.source,
+            "enabled": bool(self.enabled),
+            "locked": bool(self.locked),
+        }
+
+    @classmethod
+    def from_json(cls, data: dict, default_source: SegmentSource = "manual") -> "TimelineSegment":
+        return cls(
+            start_time=float(data.get("start", data.get("start_time", 0.0))),
+            end_time=float(data.get("end", data.get("end_time", 0.0))),
+            source=data.get("source", default_source),
+            enabled=bool(data.get("enabled", True)),
+            locked=bool(data.get("locked", False)),
+        )
+
 
 class WorkflowMode(str, Enum):
     PIPELINE_1 = "Pipeline 1 — Shuffle + Image"
@@ -32,6 +74,16 @@ class SceneShuffleSettings:
     keep_first_segment: bool = True
     fallback_min_seconds: float = 3.0
     fallback_max_seconds: float = 5.0
+    auto_segments: list[TimelineSegment] = field(default_factory=list)
+    manual_segments: list[TimelineSegment] = field(default_factory=list)
+    segment_video_path: str | None = None
+
+    @property
+    def manual_mode(self) -> bool:
+        return len(self.manual_segments) > 0
+
+    def active_segments(self) -> list[TimelineSegment]:
+        return self.manual_segments if self.manual_mode else self.auto_segments
 
 
 @dataclass(slots=True)
