@@ -8,6 +8,7 @@ try:
     from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
     from PySide6.QtWidgets import (
         QButtonGroup,
+        QCheckBox,
         QComboBox,
         QDoubleSpinBox,
         QFileDialog,
@@ -25,7 +26,7 @@ try:
     )
 except ImportError:
     Qt = Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
-    QButtonGroup = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
+    QButtonGroup = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
     QGroupBox = QListWidget = QPushButton = QRadioButton = QSlider = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.overlays.template_manager import TemplateManager, TextTemplate
@@ -87,6 +88,9 @@ if QWidget:
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake", "Rotate Float"])
             self.sticker_motion_speed = self._motion_speed_slider()
             self.sticker_motion_strength = self._motion_strength_slider()
+            self.link_motion_speed = QCheckBox("Link Text & Sticker Speed")
+            self.link_motion_speed.setChecked(False)
+            self.link_motion_speed.setToolTip("When enabled, sticker motion speed follows text motion speed.")
 
             sticker_button = QPushButton("Chọn sticker")
             image_button = QPushButton("Chọn ảnh (multi-select)")
@@ -115,8 +119,10 @@ if QWidget:
             self.sticker_scale.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_rotation.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_motion.currentTextChanged.connect(lambda _text: self.emit_sticker_controls())
+            self.text_motion_speed.valueChanged.connect(lambda _value: self._sync_linked_motion_speed())
             self.sticker_motion_speed.valueChanged.connect(lambda _value: self.emit_sticker_controls())
             self.sticker_motion_strength.valueChanged.connect(lambda _value: self.emit_sticker_controls())
+            self.link_motion_speed.toggled.connect(lambda _checked: self._set_speed_link_state())
             self.image_height.valueChanged.connect(lambda _value: self._clamp_overlap())
 
         def selected_workflow_mode(self) -> WorkflowMode:
@@ -208,6 +214,12 @@ if QWidget:
             index = min(max(int(slider.value()), 0), len(self.MOTION_SPEED_VALUES) - 1)
             return self.MOTION_SPEED_VALUES[index]
 
+        def text_motion_speed_ratio(self) -> float:
+            return self.motion_speed_ratio(self.text_motion_speed)
+
+        def sticker_motion_speed_ratio(self) -> float:
+            return self.motion_speed_ratio(self.sticker_motion_speed)
+
         @staticmethod
         def motion_strength_ratio(slider: QSlider) -> float:
             return max(0.05, float(slider.value()) / 100.0)
@@ -251,7 +263,7 @@ if QWidget:
             form.addRow("Template", self.template)
             form.addRow("Font", self.font_size)
             form.addRow("Motion", self.motion)
-            form.addRow("Speed", self.text_motion_speed)
+            form.addRow("Motion Speed", self.text_motion_speed)
             form.addRow("Strength", self.text_motion_strength)
             return group
 
@@ -262,9 +274,23 @@ if QWidget:
             form.addRow("Scale", self.sticker_scale)
             form.addRow("Rotation", self.sticker_rotation)
             form.addRow("Motion", self.sticker_motion)
-            form.addRow("Speed", self.sticker_motion_speed)
+            form.addRow("Motion Speed", self.sticker_motion_speed)
             form.addRow("Strength", self.sticker_motion_strength)
+            form.addRow(self.link_motion_speed)
             return group
+
+        def _sync_linked_motion_speed(self) -> None:
+            if not self.link_motion_speed.isChecked():
+                return
+            if self.sticker_motion_speed.value() != self.text_motion_speed.value():
+                self.sticker_motion_speed.setValue(self.text_motion_speed.value())
+            else:
+                self.emit_sticker_controls()
+
+        def _set_speed_link_state(self) -> None:
+            linked = self.link_motion_speed.isChecked()
+            self.sticker_motion_speed.setEnabled(not linked)
+            self._sync_linked_motion_speed()
 
         def emit_sticker_controls(self) -> None:
             self.stickerControlsChanged.emit(float(self.sticker_scale.value()), float(self.sticker_rotation.value()), self.sticker_motion.currentText())

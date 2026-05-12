@@ -195,7 +195,7 @@ if QMainWindow:
             self.state.overlays.sticker.scale = scale
             self.state.overlays.sticker.rotation = rotation
             self.state.overlays.sticker.motion = MotionPreset.from_label(motion)
-            self.state.overlays.sticker.motion_speed = self.workflow.motion_speed_ratio(self.workflow.sticker_motion_speed)
+            self.state.overlays.sticker.motion_speed = self.workflow.sticker_motion_speed_ratio()
             self.state.overlays.sticker.motion_strength = self.workflow.motion_strength_ratio(self.workflow.sticker_motion_strength)
             self.update_sticker_preview()
 
@@ -212,7 +212,7 @@ if QMainWindow:
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
-            self.state.overlays.text.motion_speed = self.workflow.motion_speed_ratio(self.workflow.text_motion_speed)
+            self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)
             mode = self.workflow.selected_workflow_mode()
             active = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} and self.state.overlays.text.active
@@ -371,7 +371,7 @@ if QMainWindow:
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.font_size = self.workflow.font_size.value()
             self.state.overlays.text.motion = MotionPreset.from_label(self.workflow.motion.currentText())
-            self.state.overlays.text.motion_speed = self.workflow.motion_speed_ratio(self.workflow.text_motion_speed)
+            self.state.overlays.text.motion_speed = self.workflow.text_motion_speed_ratio()
             self.state.overlays.text.motion_strength = self.workflow.motion_strength_ratio(self.workflow.text_motion_strength)
             self.set_sticker_controls(
                 float(self.workflow.sticker_scale.value()),
