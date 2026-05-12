@@ -76,14 +76,14 @@ if QWidget:
             self._populate_template_combo()
             self.font_size = QSpinBox(); self.font_size.setRange(18, 260); self.font_size.setValue(96)
             self.motion = QComboBox(); self.motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake"])
-            self.text_motion_speed = self._motion_slider()
-            self.text_motion_strength = self._motion_slider()
+            self.text_motion_speed = self._motion_speed_slider()
+            self.text_motion_strength = self._motion_strength_slider()
 
             self.sticker_scale = QDoubleSpinBox(); self.sticker_scale.setRange(0.05, 0.45); self.sticker_scale.setSingleStep(0.01); self.sticker_scale.setDecimals(2); self.sticker_scale.setValue(0.16); self.sticker_scale.setSuffix(" canvas")
             self.sticker_rotation = QSpinBox(); self.sticker_rotation.setRange(-360, 360); self.sticker_rotation.setValue(0); self.sticker_rotation.setSuffix("°")
             self.sticker_motion = QComboBox(); self.sticker_motion.addItems(["None", "Fade In", "Fade Out", "Pop", "Bounce", "Scale", "Scale Up", "Scale Down", "Float", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Pulse", "Shake", "Rotate Float"])
-            self.sticker_motion_speed = self._motion_slider()
-            self.sticker_motion_strength = self._motion_slider()
+            self.sticker_motion_speed = self._motion_speed_slider()
+            self.sticker_motion_strength = self._motion_strength_slider()
 
             sticker_button = QPushButton("Chọn sticker")
             image_button = QPushButton("Chọn ảnh (multi-select)")
@@ -171,16 +171,39 @@ if QWidget:
             form.setHorizontalSpacing(8)
             return form
 
-        def _motion_slider(self) -> QSlider:
+        MOTION_SPEED_VALUES = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0)
+
+        def _motion_speed_slider(self) -> QSlider:
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(0, len(self.MOTION_SPEED_VALUES) - 1)
+            slider.setValue(self.MOTION_SPEED_VALUES.index(1.0))
+            slider.setSingleStep(1)
+            slider.setPageStep(1)
+            slider.setTickPosition(QSlider.TicksBelow)
+            slider.setTickInterval(1)
+            slider.setToolTip("Motion Speed: 0.25x, 0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x, 3.0x")
+            return slider
+
+        def _motion_strength_slider(self) -> QSlider:
             slider = QSlider(Qt.Horizontal)
             slider.setRange(50, 200)
             slider.setValue(100)
-            slider.setToolTip("100 = normal; 50 = slower/weaker; 200 = faster/stronger")
+            slider.setToolTip("Motion Strength: 100 = normal; 50 = subtle; 200 = strong")
             return slider
 
+        def motion_speed_ratio(self, slider: QSlider) -> float:
+            index = min(max(int(slider.value()), 0), len(self.MOTION_SPEED_VALUES) - 1)
+            return self.MOTION_SPEED_VALUES[index]
+
         @staticmethod
-        def slider_ratio(slider: QSlider) -> float:
+        def motion_strength_ratio(slider: QSlider) -> float:
             return max(0.05, float(slider.value()) / 100.0)
+
+        def slider_ratio(self, slider: QSlider) -> float:
+            # Backward-compatible helper for older callers; speed sliders use the discrete mapping.
+            if int(slider.maximum()) == len(self.MOTION_SPEED_VALUES) - 1:
+                return self.motion_speed_ratio(slider)
+            return self.motion_strength_ratio(slider)
 
         def _pipeline_group(self):
             group = QGroupBox("1. PIPELINE")

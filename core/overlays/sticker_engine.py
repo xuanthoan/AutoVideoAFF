@@ -22,7 +22,7 @@ class StickerEngine:
             f"[{sticker_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame,"
             f"rotate='{rotation_expr}':ow=rotw(iw):oh=roth(ih):c=none"
             f"{alpha_filter}[{prepared}];"
-            f"[{video_label}][{prepared}]overlay=x={x}:y={y}:enable='{enable}'[{out}]"
+            f"[{video_label}][{prepared}]overlay=x={x}:y={y}:eval=frame:enable='{enable}'[{out}]"
         )
         return chain, out
 

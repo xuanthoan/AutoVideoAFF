@@ -7,9 +7,22 @@ FFmpeg filtergraphs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, sin
+from enum import Enum
+from math import cos, pi, sin
 
 from models.overlay import MotionPreset
+
+
+class Easing(str, Enum):
+    """Easing names supported by preview and FFmpeg expression generation."""
+
+    LINEAR = "linear"
+    EASE_IN = "ease_in"
+    EASE_OUT = "ease_out"
+    EASE_IN_OUT = "ease_in_out"
+    ELASTIC = "elastic"
+    BACK = "back"
+    BOUNCE = "bounce"
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,11 +33,13 @@ class MotionSpec:
     start: float = 0.0
     end: float = 3.0
     fade_duration: float = 0.35
-    pop_duration: float = 0.30
-    bounce_duration: float = 0.55
+    pop_duration: float = 0.60
+    bounce_duration: float = 2.0
     slide_duration: float = 0.35
+    scale_duration: float = 0.60
     speed: float = 1.0
     strength: float = 1.0
+    easing: Easing = Easing.EASE_OUT
 
     @property
     def duration(self) -> float:
@@ -42,8 +57,87 @@ class PreviewTransform:
     rotation_delta: float = 0.0
 
 
+class EasingEngine:
+    """Numerical and FFmpeg-expression easing helpers shared by both paths."""
+
+    @staticmethod
+    def resolve(easing: Easing | str) -> Easing:
+        if isinstance(easing, Easing):
+            return easing
+        value = str(easing).strip().lower().replace("-", "_").replace(" ", "_")
+        for item in Easing:
+            if item.value == value:
+                return item
+        return Easing.EASE_OUT
+
+    @staticmethod
+    def clip01(value: float) -> float:
+        return min(max(value, 0.0), 1.0)
+
+    def apply(self, value: float, easing: Easing | str = Easing.EASE_OUT) -> float:
+        p = self.clip01(value)
+        easing = self.resolve(easing)
+        if easing == Easing.LINEAR:
+            return p
+        if easing == Easing.EASE_IN:
+            return p * p
+        if easing == Easing.EASE_OUT:
+            return 1.0 - (1.0 - p) * (1.0 - p)
+        if easing == Easing.EASE_IN_OUT:
+            return 2.0 * p * p if p < 0.5 else 1.0 - pow(-2.0 * p + 2.0, 2) / 2.0
+        if easing == Easing.ELASTIC:
+            if p in {0.0, 1.0}:
+                return p
+            return pow(2.0, -10.0 * p) * sin((p * 10.0 - 0.75) * (2.0 * pi / 3.0)) + 1.0
+        if easing == Easing.BACK:
+            c1 = 1.70158
+            c3 = c1 + 1.0
+            return 1.0 + c3 * pow(p - 1.0, 3) + c1 * pow(p - 1.0, 2)
+        if easing == Easing.BOUNCE:
+            n1 = 7.5625
+            d1 = 2.75
+            if p < 1.0 / d1:
+                return n1 * p * p
+            if p < 2.0 / d1:
+                p -= 1.5 / d1
+                return n1 * p * p + 0.75
+            if p < 2.5 / d1:
+                p -= 2.25 / d1
+                return n1 * p * p + 0.9375
+            p -= 2.625 / d1
+            return n1 * p * p + 0.984375
+        return p
+
+    @staticmethod
+    def expr(progress: str, easing: Easing | str = Easing.EASE_OUT) -> str:
+        p = f"min(max({progress},0),1)"
+        easing = EasingEngine.resolve(easing)
+        if easing == Easing.LINEAR:
+            return p
+        if easing == Easing.EASE_IN:
+            return f"({p})*({p})"
+        if easing == Easing.EASE_OUT:
+            return f"1-(1-({p}))*(1-({p}))"
+        if easing == Easing.EASE_IN_OUT:
+            return f"if(lt({p},0.5),2*({p})*({p}),1-pow(-2*({p})+2,2)/2)"
+        if easing == Easing.ELASTIC:
+            return f"if(or(eq({p},0),eq({p},1)),{p},pow(2,-10*({p}))*sin((({p})*10-0.75)*(2*PI/3))+1)"
+        if easing == Easing.BACK:
+            return f"1+2.70158*pow(({p})-1,3)+1.70158*pow(({p})-1,2)"
+        if easing == Easing.BOUNCE:
+            return (
+                f"if(lt({p},1/2.75),7.5625*({p})*({p}),"
+                f"if(lt({p},2/2.75),7.5625*(({p})-1.5/2.75)*(({p})-1.5/2.75)+0.75,"
+                f"if(lt({p},2.5/2.75),7.5625*(({p})-2.25/2.75)*(({p})-2.25/2.75)+0.9375,"
+                f"7.5625*(({p})-2.625/2.75)*(({p})-2.625/2.75)+0.984375)))"
+            )
+        return p
+
+
 class MotionEvaluator:
     """Numerically evaluate overlay motion for live preview."""
+
+    easing_engine = EasingEngine()
 
     @staticmethod
     def preset(motion: MotionPreset | str) -> MotionPreset:
@@ -56,6 +150,7 @@ class MotionEvaluator:
         end: float | None = None,
         speed: float = 1.0,
         strength: float = 1.0,
+        easing: Easing | str = Easing.EASE_OUT,
     ) -> MotionSpec:
         start = max(0.0, float(start))
         resolved_end = max(start + 0.1, float(end)) if end is not None else start + 3.0
@@ -65,6 +160,7 @@ class MotionEvaluator:
             end=resolved_end,
             speed=max(0.05, float(speed)),
             strength=max(0.0, float(strength)),
+            easing=EasingEngine.resolve(easing),
         )
 
     def local_time(self, spec: MotionSpec, current_time: float) -> float:
@@ -72,11 +168,14 @@ class MotionEvaluator:
 
     @staticmethod
     def _clip01(value: float) -> float:
-        return min(max(value, 0.0), 1.0)
+        return EasingEngine.clip01(value)
 
     @staticmethod
     def _with_strength(value: float, strength: float) -> float:
         return 1.0 + (value - 1.0) * strength
+
+    def _ease(self, value: float, spec: MotionSpec) -> float:
+        return self.easing_engine.apply(value, spec.easing)
 
     def opacity_at(self, spec: MotionSpec, local_t: float) -> float:
         fade_duration = max(spec.fade_duration, 0.05)
@@ -89,27 +188,26 @@ class MotionEvaluator:
 
     def scale_at(self, spec: MotionSpec, local_t: float) -> float:
         if spec.preset in {MotionPreset.POP, MotionPreset.ZOOM}:
-            if local_t < 0.15:
-                value = 0.80 + 0.40 * self._clip01(local_t / 0.15)
-            elif local_t < 0.30:
-                value = 1.20 - 0.20 * self._clip01((local_t - 0.15) / 0.15)
+            d = max(spec.pop_duration, 0.05)
+            if local_t < d * 0.55:
+                p = self._ease(local_t / (d * 0.55), spec)
+                value = 0.70 + 0.60 * p
+            elif local_t < d:
+                p = self._ease((local_t - d * 0.55) / (d * 0.45), spec)
+                value = 1.30 - 0.30 * p
             else:
                 value = 1.0
             return self._with_strength(value, spec.strength)
-        if spec.preset == MotionPreset.BOUNCE:
-            if local_t < 0.25:
-                value = 0.85 + 0.23 * self._clip01(local_t / 0.25)
-            elif local_t < 0.55:
-                value = 1.08 - 0.08 * self._clip01((local_t - 0.25) / 0.30)
-            else:
-                value = 1.0
-            return self._with_strength(value, spec.strength)
-        if spec.preset in {MotionPreset.SCALE, MotionPreset.SCALE_UP}:
-            return 1.0 + 0.15 * spec.strength * self._clip01(local_t / max(spec.duration, 0.1))
+        if spec.preset == MotionPreset.SCALE:
+            return 1.0 + 0.10 * spec.strength * sin(local_t * 4.0)
+        if spec.preset == MotionPreset.SCALE_UP:
+            p = self._ease(local_t / max(spec.scale_duration, 0.05), spec)
+            return self._with_strength(0.80 + 0.20 * p, spec.strength)
         if spec.preset == MotionPreset.SCALE_DOWN:
-            return 1.15 - 0.15 * spec.strength * self._clip01(local_t / max(spec.duration, 0.1))
+            p = self._ease(local_t / max(spec.scale_duration, 0.05), spec)
+            return self._with_strength(1.20 - 0.20 * p, spec.strength)
         if spec.preset == MotionPreset.PULSE:
-            return 1.0 + 0.05 * spec.strength * sin(local_t * 8)
+            return 1.0 + 0.08 * spec.strength * sin(local_t * 8.0)
         return 1.0
 
     def offset_at(
@@ -123,7 +221,7 @@ class MotionEvaluator:
         x_ratio: float = 0.5,
         y_ratio: float = 0.5,
     ) -> tuple[float, float]:
-        slide_p = self._clip01(local_t / spec.slide_duration)
+        slide_p = self._ease(local_t / spec.slide_duration, spec)
         base_left = canvas_width * x_ratio - overlay_width / 2
         base_top = canvas_height * y_ratio - overlay_height / 2
         if spec.preset in {MotionPreset.SLIDE, MotionPreset.SLIDE_LEFT}:
@@ -134,6 +232,8 @@ class MotionEvaluator:
             return 0.0, (canvas_height - base_top) * (1 - slide_p)
         if spec.preset == MotionPreset.SLIDE_DOWN:
             return 0.0, (-overlay_height - base_top) * (1 - slide_p)
+        if spec.preset == MotionPreset.BOUNCE:
+            return 0.0, 24.0 * spec.strength * sin(local_t * 10.0) * pow(2.718281828, -1.8 * local_t)
         if spec.preset in {MotionPreset.FLOAT, MotionPreset.DRIFT}:
             return 18 * spec.strength * sin(local_t * 1.4), 12 * spec.strength * cos(local_t * 1.1)
         if spec.preset == MotionPreset.SHAKE:
@@ -144,7 +244,7 @@ class MotionEvaluator:
 
     def rotation_delta_at(self, spec: MotionSpec, local_t: float) -> float:
         if spec.preset == MotionPreset.ROTATE_FLOAT:
-            return 8 * spec.strength * sin(local_t * 3)
+            return 6.0 * spec.strength * sin(local_t * 3.0)
         return 0.0
 
 
@@ -216,8 +316,15 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         end: float | None = None,
         speed: float = 1.0,
         strength: float = 1.0,
+        easing: Easing | str = Easing.EASE_OUT,
     ) -> MotionSpec:
-        return self.spec(motion, start, end, speed, strength)
+        return self.spec(motion, start, end, speed, strength, easing)
+
+    def _ease_expr_raw(self, progress: str, easing: Easing | str = Easing.EASE_OUT) -> str:
+        return f"({EasingEngine.expr(progress, easing)})"
+
+    def _ease_expr(self, progress: str, easing: Easing | str = Easing.EASE_OUT) -> str:
+        return self._e(self._ease_expr_raw(progress, easing))
 
     def position_expr(
         self,
@@ -235,7 +342,7 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         base_y = f"H*{y:.4f}-h/2"
         enable = f"between(t,{spec.start:.3f},{spec.end:.3f})"
         local_t = self.local_time_expr(spec.start, spec.speed)
-        slide_p = self._clip01_expr(f"{local_t}/{spec.slide_duration:.3f}")
+        slide_p = self._ease_expr(f"{local_t}/{spec.slide_duration:.3f}", spec.easing)
         amp = f"{spec.strength:.4f}"
 
         if spec.preset in {MotionPreset.SLIDE, MotionPreset.SLIDE_LEFT}:
@@ -246,6 +353,8 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
             return base_x, f"H-(H-({base_y}))*{slide_p}", enable
         if spec.preset == MotionPreset.SLIDE_DOWN:
             return base_x, f"-h+(({base_y})+h)*{slide_p}", enable
+        if spec.preset == MotionPreset.BOUNCE:
+            return base_x, f"{base_y}+24*{amp}*sin({local_t}*10)*exp(-1.8*{local_t})", enable
         if spec.preset in {MotionPreset.FLOAT, MotionPreset.DRIFT}:
             return f"{base_x}+18*{amp}*sin({local_t}*1.4)", f"{base_y}+12*{amp}*cos({local_t}*1.1)", enable
         if spec.preset == MotionPreset.SHAKE:
@@ -283,34 +392,31 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
     ) -> str:
         spec = self.animation(motion, start, end, speed, strength)
         local_t = self.local_time_expr(spec.start, spec.speed)
-        duration = spec.duration
-        progress = self._clip01_expr(f"{local_t}/{duration:.3f}")
-        pop_up = self._clip01_raw(f"{local_t}/0.150")
-        pop_down = self._clip01_raw(f"({local_t}-0.150)/0.150")
-        bounce_up = self._clip01_raw(f"{local_t}/0.250")
-        bounce_down = self._clip01_raw(f"({local_t}-0.250)/0.300")
         strength_expr = f"{spec.strength:.4f}"
 
         if spec.preset in {MotionPreset.POP, MotionPreset.ZOOM}:
+            first_d = spec.pop_duration * 0.55
+            second_d = spec.pop_duration * 0.45
+            pop_up = self._ease_expr_raw(f"{local_t}/{first_d:.3f}", spec.easing)
+            pop_down = self._ease_expr_raw(f"({local_t}-{first_d:.3f})/{second_d:.3f}", spec.easing)
             raw = (
-                f"if(lt({local_t},0),0.80,"
-                f"if(lt({local_t},0.150),0.80+0.40*{pop_up},"
-                f"if(lt({local_t},0.300),1.20-0.20*{pop_down},1.00)))"
+                f"if(lt({local_t},0),0.70,"
+                f"if(lt({local_t},{first_d:.3f}),0.70+0.60*{pop_up},"
+                f"if(lt({local_t},{spec.pop_duration:.3f}),1.30-0.30*{pop_down},1.00)))"
             )
             return self._e(f"1+({raw}-1)*{strength_expr}")
-        if spec.preset == MotionPreset.BOUNCE:
-            raw = (
-                f"if(lt({local_t},0),0.85,"
-                f"if(lt({local_t},0.250),0.85+0.23*{bounce_up},"
-                f"if(lt({local_t},0.550),1.08-0.08*{bounce_down},1.00)))"
-            )
+        if spec.preset == MotionPreset.SCALE:
+            return f"1.00+0.10*{strength_expr}*sin({local_t}*4)"
+        if spec.preset == MotionPreset.SCALE_UP:
+            progress = self._ease_expr_raw(f"{local_t}/{spec.scale_duration:.3f}", spec.easing)
+            raw = f"0.80+0.20*{progress}"
             return self._e(f"1+({raw}-1)*{strength_expr}")
-        if spec.preset in {MotionPreset.SCALE, MotionPreset.SCALE_UP}:
-            return f"1.00+0.15*{strength_expr}*{progress}"
         if spec.preset == MotionPreset.SCALE_DOWN:
-            return f"1.15-0.15*{strength_expr}*{progress}"
+            progress = self._ease_expr_raw(f"{local_t}/{spec.scale_duration:.3f}", spec.easing)
+            raw = f"1.20-0.20*{progress}"
+            return self._e(f"1+({raw}-1)*{strength_expr}")
         if spec.preset == MotionPreset.PULSE:
-            return f"1.00+0.05*{strength_expr}*sin({local_t}*8)"
+            return f"1.00+0.08*{strength_expr}*sin({local_t}*8)"
         return "1.00"
 
     def region_scale_expr(
@@ -336,7 +442,7 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         preset = self.preset(motion)
         local_t = self.local_time_expr(start, speed)
         if preset == MotionPreset.ROTATE_FLOAT:
-            return f"({float(base_degrees):.4f}+8*{max(0.0, float(strength)):.4f}*sin({local_t}*3))*PI/180"
+            return f"({float(base_degrees):.4f}+6*{max(0.0, float(strength)):.4f}*sin({local_t}*3))*PI/180"
         return f"{float(base_degrees):.4f}*PI/180"
 
     def preview_alpha(
@@ -411,7 +517,17 @@ class FFmpegExpressionBuilder(PreviewTransformEvaluator):
         target_w = max(1, round(canvas_width * min(max(scale_ratio, 0.01), 1.0)))
         return self.region_scale_expr(str(target_w), motion, start, end, speed=speed, strength=strength)
 
+    def debug_summary(self, motion: MotionPreset | str, start: float, end: float, speed: float = 1.0, strength: float = 1.0) -> str:
+        spec = self.spec(motion, start, end, speed, strength)
+        scale_expr = self._scale_factor_expr(spec.preset, spec.start, spec.end, spec.speed, spec.strength)
+        return (
+            f"[MOTION] type={spec.preset.value} speed={spec.speed:.2f} strength={spec.strength:.2f} "
+            f"duration={spec.duration:.2f} fade_duration={spec.fade_duration / spec.speed:.3f} "
+            f"expression=scale:{scale_expr}"
+        )
+
 
 # Backward-compatible names used by existing overlay modules/tests.
 OverlayAnimation = MotionSpec
+FFmpegMotionBuilder = FFmpegExpressionBuilder
 MotionEngine = FFmpegExpressionBuilder

@@ -27,6 +27,7 @@ class OverlayPipeline:
                 temp_files=graph.temp_files,
             )
             graph.debug_events.append(f"[OVERLAY] text index={index} asset={asset_path.name} region=minimal_bbox")
+            graph.debug_events.append(self.text_engine.motion.debug_summary(text_overlay.motion, text_overlay.start_time, text_overlay.end_time, text_overlay.motion_speed, text_overlay.motion_strength))
             graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
             if "-shortest" not in graph.extra_args:
                 graph.extra_args.append("-shortest")
@@ -44,7 +45,10 @@ class OverlayPipeline:
                 f"[OVERLAY] sticker index={index} target_width={transform.sticker_width_pixels(job.video_width)} "
                 f"center=({transform.x:.3f},{transform.y:.3f}) rotation={transform.rotation:.1f}"
             )
-            graph.inputs.extend(["-i", str(sticker_overlay.path)])
+            graph.debug_events.append(self.sticker_engine.motion.debug_summary(sticker_overlay.motion, sticker_overlay.start_time, sticker_overlay.end_time, sticker_overlay.motion_speed, sticker_overlay.motion_strength))
+            graph.inputs.extend(["-loop", "1", "-i", str(sticker_overlay.path)])
+            if "-shortest" not in graph.extra_args:
+                graph.extra_args.append("-shortest")
             sticker_index = sum(1 for token in graph.inputs if token == "-i")
             chain, output = self.sticker_engine.build_filter(
                 graph.video_label,
