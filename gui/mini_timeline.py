@@ -4,11 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 try:
-    from PySide6.QtCore import QRectF, Qt, QTimer, Signal
+    from PySide6.QtCore import QRectF, Qt, Signal
     from PySide6.QtGui import QColor, QPainter, QPen
     from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget
 except ImportError:  # keep non-GUI imports lightweight in CI
-    QRectF = Qt = QTimer = Signal = QColor = QPainter = QPen = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QVBoxLayout = QWidget = None
+    QRectF = Qt = Signal = QColor = QPainter = QPen = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QVBoxLayout = QWidget = None
 
 
 @dataclass(slots=True)
@@ -258,6 +258,9 @@ if QWidget:
         undoCutRequested = Signal()
         redoCutRequested = Signal()
         clearManualCutsRequested = Signal()
+        playRequested = Signal()
+        pauseRequested = Signal()
+        stopRequested = Signal()
 
         def __init__(self) -> None:
             super().__init__()
@@ -266,6 +269,7 @@ if QWidget:
             self.setStyleSheet("QWidget{background:#101010;color:#dedede;} QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;}")
             self.current_time = 0.0
             self.video_duration = 6.0
+            self._is_playback_requested = False
             self.play_button = QPushButton("Play")
             self.pause_button = QPushButton("Pause")
             self.stop_button = QPushButton("Stop")
@@ -284,8 +288,6 @@ if QWidget:
             self.segment_list.setMinimumWidth(260)
             self.segment_list.setToolTip("# | Start | End | Duration | Lock | Enable | Type")
             self.tracks = MiniTimelineTracks()
-            self.timer = QTimer(self)
-            self.timer.setInterval(33)
             controls = QHBoxLayout()
             controls.setContentsMargins(0, 0, 0, 0)
             controls.setSpacing(4)
@@ -324,7 +326,6 @@ if QWidget:
             self.preview_order_button.clicked.connect(self.previewShuffleOrderRequested.emit)
             self.save_timeline_button.clicked.connect(self.saveTimelineRequested.emit)
             self.load_timeline_button.clicked.connect(self.loadTimelineRequested.emit)
-            self.timer.timeout.connect(self._tick)
             self.tracks.playheadChanged.connect(self.set_playhead_time)
             self.tracks.playheadChanged.connect(self.playheadChanged.emit)
             self.tracks.overlayTimingChanged.connect(self.overlayTimingChanged.emit)
@@ -370,24 +371,21 @@ if QWidget:
             self.tracks.set_playhead(self.current_time)
             self.time_label.setText(f"{self._format_time(self.current_time)} / {self._format_time(self.video_duration)}")
 
+        def set_playback_active(self, active: bool) -> None:
+            self._is_playback_requested = bool(active)
+
         def play(self) -> None:
-            self.timer.start()
+            self.playRequested.emit()
 
         def pause(self) -> None:
-            self.timer.stop()
+            self._is_playback_requested = False
+            self.pauseRequested.emit()
 
         def stop(self) -> None:
-            self.timer.stop()
+            self._is_playback_requested = False
             self.set_playhead_time(0.0)
             self.playheadChanged.emit(0.0)
-
-        def _tick(self) -> None:
-            next_time = self.current_time + self.timer.interval() / 1000
-            if next_time >= self.video_duration:
-                self.stop()
-                return
-            self.set_playhead_time(next_time)
-            self.playheadChanged.emit(self.current_time)
+            self.stopRequested.emit()
 
         def _select_from_tracks(self, key: str) -> None:
             for row, item in enumerate(self.tracks.items):
@@ -431,7 +429,7 @@ if QWidget:
 
         def keyPressEvent(self, event):
             if event.key() == Qt.Key_Space:
-                self.pause() if self.timer.isActive() else self.play()
+                self.pause() if self._is_playback_requested else self.play()
                 return
             if event.key() == Qt.Key_Left:
                 self.set_playhead_time(max(0.0, self.current_time - 1 / 30))

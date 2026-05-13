@@ -3,15 +3,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
 try:
-    from PySide6.QtCore import Qt, QThread, QUrl, Signal
+    from PySide6.QtCore import QObject, Qt, QThread, QTimer, QUrl, Signal
     from PySide6.QtGui import QDesktopServices
-    from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
 except ImportError:
-    Qt = QThread = QUrl = Signal = QDesktopServices = QFileDialog = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
+    QObject = Qt = QThread = QTimer = QUrl = Signal = QDesktopServices = QFileDialog = QGroupBox = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.pipeline.shuffle_pipeline import SceneShufflePipeline
 from core.overlays.watermark_engine import WatermarkLayoutEngine
@@ -80,6 +81,105 @@ if QMainWindow:
             self.ready.emit(self.source_hash, [str(path) for path in paths])
 
 
+    class PreviewPlaybackController(QObject):
+        """Single owner for preview playback state and timer lifecycle."""
+
+        warning = Signal(str)
+        log = Signal(str)
+        stateChanged = Signal(bool)
+
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            self.is_playing = False
+            self.current_time = 0.0
+            self.duration = 0.0
+            self.current_video: Path | None = None
+            self.frame_provider = None
+            self.frame_updater = None
+            self.overlay_updater = None
+            self.timeline_updater = None
+            self.decoder_worker = None
+            self.timer = QTimer(self)
+            self.timer.setInterval(33)
+            self.timer.timeout.connect(self._tick)
+
+        def configure_callbacks(self, frame_updater, overlay_updater, timeline_updater) -> None:
+            self.frame_updater = frame_updater
+            self.overlay_updater = overlay_updater
+            self.timeline_updater = timeline_updater
+
+        def reset(self) -> None:
+            self.log.emit("[PREVIEW] reset controller")
+            self.stop(reset_time=True)
+            self.current_video = None
+            self.duration = 0.0
+            self.frame_provider = None
+            self.decoder_worker = None
+
+        def load_video(self, video_path: Path, duration: float, frame_provider) -> None:
+            self.stop(reset_time=True)
+            self.current_video = video_path
+            self.duration = max(0.0, float(duration))
+            self.frame_provider = frame_provider
+            self.current_time = 0.0
+            self.log.emit(f"[PREVIEW] load video: {video_path}")
+
+        def set_time(self, time_seconds: float) -> None:
+            self.current_time = min(max(float(time_seconds), 0.0), max(self.duration, 0.0))
+
+        def play(self) -> None:
+            if self.current_video is None:
+                return
+            if self.duration <= 0:
+                self.warning.emit("[PREVIEW] Cannot play: video duration is unavailable.")
+                return
+            if self.frame_provider is None or not self.frame_provider():
+                self.warning.emit("[PREVIEW] Cannot play: preview frame provider is not ready.")
+                return
+            if self.frame_updater is None or self.overlay_updater is None or self.timeline_updater is None:
+                self.warning.emit("[PREVIEW] Cannot play: preview UI is not ready.")
+                return
+            if self.decoder_worker is not None and hasattr(self.decoder_worker, "isRunning") and self.decoder_worker.isRunning():
+                self.warning.emit("[PREVIEW] Decoder worker is busy; reset preview before playing.")
+                return
+            if self.timer.isActive():
+                self.timer.stop()
+            self.is_playing = True
+            self.log.emit("[PREVIEW] play start")
+            self.stateChanged.emit(True)
+            self.timer.start()
+
+        def pause(self) -> None:
+            self.stop(reset_time=False)
+
+        def stop(self, reset_time: bool = False) -> None:
+            if self.timer.isActive():
+                self.log.emit("[PREVIEW] stop timer")
+                self.timer.stop()
+            was_playing = self.is_playing
+            self.is_playing = False
+            if reset_time:
+                self.current_time = 0.0
+            if was_playing:
+                self.log.emit("[PREVIEW] playback stopped safely")
+            self.stateChanged.emit(False)
+
+        def _tick(self) -> None:
+            try:
+                self.current_time = min(self.current_time + self.timer.interval() / 1000.0, self.duration)
+                if self.frame_updater is None or self.overlay_updater is None or self.timeline_updater is None:
+                    raise RuntimeError("preview callbacks are no longer available")
+                self.frame_updater(self.current_time)
+                self.overlay_updater(self.current_time)
+                self.timeline_updater(self.current_time)
+                if self.current_time >= self.duration:
+                    self.stop(reset_time=False)
+            except Exception as exc:
+                self.stop(reset_time=False)
+                self.log.emit(f"[PREVIEW] play tick error: {exc}")
+                self.warning.emit("[PREVIEW] Playback stopped after a recoverable preview error; the app remains open.")
+
+
     class MainWindow(QMainWindow):
         def __init__(self) -> None:
             super().__init__()
@@ -95,6 +195,7 @@ if QMainWindow:
             self.stop_button = QPushButton("Stop")
             self.stop_button.setEnabled(False)
             self.open_output_button = QPushButton("Open Output Folder")
+            self.reset_preview_cache_button = QPushButton("Reset Preview Cache")
             self.workflow.set_export_controls(self.export_button, self.stop_button, self.open_output_button)
             self.preview_renderer = PreviewRenderer()
             self.watermark_layout = WatermarkLayoutEngine()
@@ -105,6 +206,16 @@ if QMainWindow:
             self._preview_sequence_dir: Path | None = None
             self._preview_frame_paths: list[Path] = []
             self._preview_source_hash: str | None = None
+            self.preview_thread: PreviewFrameThread | None = None
+            self.preview_playback = PreviewPlaybackController(self)
+            self.preview_playback.configure_callbacks(
+                self.update_preview_frame,
+                self._update_preview_motion_time,
+                self._update_timeline_playhead_from_playback,
+            )
+            self.preview_playback.log.connect(self.append_log)
+            self.preview_playback.warning.connect(self.show_preview_warning)
+            self.preview_playback.stateChanged.connect(self.timeline.set_playback_active)
             self.selected_highlight_index = 0
             self.manual_cut_undo_stack: list[list[TimelineSegment]] = []
             self.manual_cut_redo_stack: list[list[TimelineSegment]] = []
@@ -120,9 +231,10 @@ if QMainWindow:
             left_splitter = QSplitter(Qt.Vertical)
             left_splitter.setMinimumWidth(220)
             left_splitter.setMaximumWidth(320)
-            left_splitter.addWidget(self.queue)
-            left_splitter.addWidget(self.log_box)
-            left_splitter.setSizes([700, 240])
+            left_splitter.addWidget(self._panel("VIDEO LIST", self.queue, "panel-video-list"))
+            left_splitter.addWidget(self._panel("LOG", self.log_box, "panel-log"))
+            left_splitter.addWidget(self.reset_preview_cache_button)
+            left_splitter.setSizes([640, 220, 40])
 
             workflow_container = QWidget()
             workflow_layout = QVBoxLayout(workflow_container)
@@ -147,8 +259,8 @@ if QMainWindow:
             center_layout = QVBoxLayout(center_column)
             center_layout.setContentsMargins(0, 0, 0, 0)
             center_layout.setSpacing(6)
-            center_layout.addWidget(self.preview, 1)
-            center_layout.addWidget(self.timeline, 0)
+            center_layout.addWidget(self._panel("PREVIEW", self.preview, "panel-preview"), 1)
+            center_layout.addWidget(self._panel("TIMELINE", self.timeline, "panel-timeline"), 0)
 
             layout.setContentsMargins(6, 6, 6, 6)
             layout.setSpacing(8)
@@ -156,10 +268,14 @@ if QMainWindow:
             layout.addWidget(center_column, 56)
             layout.addWidget(right_column, 28)
             self.setCentralWidget(root)
+            self.preview_playback.reset()
+            self._clear_preview_runtime_state(clear_canvas=False, log_session=True)
+            self.timeline.set_playhead_time(0.0)
+            self.preview.set_playhead_time(0.0)
 
         def _wire(self) -> None:
             self.queue.changed.connect(self.set_videos)
-            self.queue.currentPathChanged.connect(lambda path: (self.set_video_duration(Path(path)), self.update_preview(Path(path))))
+            self.queue.currentPathChanged.connect(self.load_selected_video)
             self.workflow.imagePoolSelected.connect(self.set_image_pool)
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
@@ -187,6 +303,9 @@ if QMainWindow:
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
             self.timeline.playheadChanged.connect(self.set_playhead_time)
+            self.timeline.playRequested.connect(self.preview_playback.play)
+            self.timeline.pauseRequested.connect(self.preview_playback.pause)
+            self.timeline.stopRequested.connect(self.stop_preview_playback)
             self.timeline.overlayTimingChanged.connect(self.set_overlay_timing)
             self.timeline.overlaySelected.connect(self.select_overlay)
             self.timeline.overlayVisibilityChanged.connect(self.set_overlay_visibility)
@@ -204,6 +323,28 @@ if QMainWindow:
             self.export_button.clicked.connect(self.render)
             self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
+            self.reset_preview_cache_button.clicked.connect(self.reset_preview_cache)
+
+        def _panel(self, title: str, widget: QWidget, object_name: str) -> QGroupBox:
+            panel = QGroupBox(title.upper())
+            panel.setObjectName(object_name)
+            panel.setStyleSheet(
+                "QGroupBox { color:#f0f0f0; font-weight:700; letter-spacing:0.8px; "
+                "margin-top:8px; padding-top:8px; border:1px solid #343a40; "
+                "border-radius:6px; background:#14171a; } "
+                "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; }"
+            )
+            layout = QVBoxLayout(panel)
+            layout.setContentsMargins(6, 10, 6, 6)
+            layout.addWidget(widget)
+            return panel
+
+        def _has_preview_frames(self) -> bool:
+            return bool(self._preview_frame_paths) and any(path.exists() for path in self._preview_frame_paths)
+
+        def show_preview_warning(self, message: str) -> None:
+            self.append_log(message)
+            self.status.showMessage(message, 6000)
 
 
         def set_safe_area_options(self, platform: str = "TikTok", enabled: bool = True, snap_enabled: bool = True) -> None:
@@ -228,15 +369,35 @@ if QMainWindow:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path)))
 
         def set_videos(self, paths: list[Path]) -> None:
-            self.state.videos = paths
+            valid_paths = [path for path in paths if path.exists()]
+            missing = len(paths) - len(valid_paths)
+            if missing:
+                self.append_log(f"[WARNING] Ignored {missing} missing video path(s).")
+            self.state.videos = valid_paths
             self.export_button.setText("Render Video")
-            self.append_log(f"[INFO] Loading videos: {len(paths)} video")
-            if paths:
-                self.set_video_duration(paths[0])
-                self.update_preview(paths[0])
-            else:
+            self.append_log(f"[INFO] Loading videos: {len(valid_paths)} video")
+            self.preview_playback.stop(reset_time=True)
+            if not valid_paths:
+                self.preview_playback.reset()
+                self._clear_preview_runtime_state(clear_canvas=True, log_session=False)
                 self.video_duration = 6.0
                 self.timeline.set_duration(self.video_duration)
+                return
+            current = self.queue.list.currentItem() if hasattr(self.queue, "list") else None
+            selected = Path(current.text()) if current is not None else valid_paths[0]
+            self.load_selected_video(str(selected))
+
+        def load_selected_video(self, path: str) -> None:
+            video_path = Path(path)
+            self.preview_playback.stop(reset_time=True)
+            self._stop_preview_thread()
+            self._clear_preview_runtime_state(clear_canvas=False, log_session=False)
+            if not video_path.exists():
+                self.append_log(f"[WARNING] Không tìm thấy video preview: {video_path}")
+                return
+            self.set_video_duration(video_path)
+            self.preview_playback.load_video(video_path, self.video_duration, self._has_preview_frames)
+            self.update_preview(video_path)
 
         def set_image_pool(self, paths: list[Path]) -> None:
             self.state.image_composite.image_pool = paths
@@ -775,41 +936,126 @@ if QMainWindow:
             if not video_path.exists():
                 self.append_log(f"[WARNING] Không tìm thấy video preview: {video_path}")
                 return
+            self._stop_preview_thread()
             self._last_preview_frame_key = None
             source_hash = hashlib.sha1(str(video_path).encode("utf-8")).hexdigest()
             self._preview_source_hash = source_hash
             self._preview_sequence_dir = self.preview_cache_dir / source_hash
             self._preview_frame_paths = sorted(self._preview_sequence_dir.glob("frame_*.jpg")) if self._preview_sequence_dir.exists() else []
+            self._preview_frame_paths = [path for path in self._preview_frame_paths if path.exists()]
             if self._preview_frame_paths:
-                self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
+                self.update_preview_frame(0.0, force=True)
+                self.preview.set_playhead_time(0.0)
+                self.timeline.set_playhead_time(0.0)
+                self.append_log("[PREVIEW] first frame loaded")
                 return
             self.append_log("[PREVIEW] Building lightweight frame cache in background...")
             self.preview_thread = PreviewFrameThread(video_path, self._preview_sequence_dir, self.preview_frame_fps, self.video_duration)
+            self.preview_playback.decoder_worker = self.preview_thread
             self.preview_thread.ready.connect(self.preview_frames_ready)
             self.preview_thread.failed.connect(self.preview_frames_failed)
+            self.preview_thread.finished.connect(lambda: setattr(self.preview_playback, "decoder_worker", None))
             self.preview_thread.start()
 
         def preview_frames_ready(self, source_hash: str, paths: list[str]) -> None:
             if source_hash != self._preview_source_hash:
                 return
-            self._preview_frame_paths = [Path(path) for path in paths]
-            self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
-            self.append_log(f"[PREVIEW] Cached {len(paths)} preview frames at {self.preview_frame_fps} FPS.")
+            self._preview_frame_paths = [Path(path) for path in paths if Path(path).exists()]
+            self.update_preview_frame(0.0, force=True)
+            self.preview.set_playhead_time(0.0)
+            self.timeline.set_playhead_time(0.0)
+            self.append_log("[PREVIEW] first frame loaded")
+            self.append_log(f"[PREVIEW] Cached {len(self._preview_frame_paths)} preview frames at {self.preview_frame_fps} FPS.")
 
         def preview_frames_failed(self, source_hash: str, message: str) -> None:
             if source_hash != self._preview_source_hash:
                 return
             self.append_log(f"[WARNING] Không tạo được preview sequence: {message}")
+
         def update_preview_frame(self, time_seconds: float, force: bool = False) -> None:
-            if not self._preview_frame_paths:
+            if self.preview is None or not self._preview_frame_paths:
                 return
             bucket = max(0, int(float(time_seconds) * self.preview_frame_fps))
             index = min(bucket, len(self._preview_frame_paths) - 1)
-            frame_key = (str(self._preview_frame_paths[index]), index)
+            frame_path = self._preview_frame_paths[index]
+            if not frame_path.exists():
+                self._preview_frame_paths = [path for path in self._preview_frame_paths if path.exists()]
+                self._last_preview_frame_key = None
+                if not self._preview_frame_paths:
+                    raise FileNotFoundError("preview frame cache is empty or invalid")
+                index = min(index, len(self._preview_frame_paths) - 1)
+                frame_path = self._preview_frame_paths[index]
+            frame_key = (str(frame_path), index)
             if not force and frame_key == self._last_preview_frame_key:
                 return
-            self.preview.set_preview_image(self._preview_frame_paths[index])
+            self.preview.set_preview_image(frame_path)
             self._last_preview_frame_key = frame_key
+
+        def _update_preview_motion_time(self, time_seconds: float) -> None:
+            if self.preview is not None:
+                self.preview.set_playhead_time(time_seconds)
+
+        def _update_timeline_playhead_from_playback(self, time_seconds: float) -> None:
+            if self.timeline is not None:
+                self.timeline.set_playhead_time(time_seconds)
+
+        def stop_preview_playback(self) -> None:
+            self.preview_playback.stop(reset_time=True)
+            self.timeline.set_playhead_time(0.0)
+            self.preview.set_playhead_time(0.0)
+            if self._preview_frame_paths:
+                self.update_preview_frame(0.0, force=True)
+
+        def _stop_preview_thread(self) -> None:
+            thread = getattr(self, "preview_thread", None)
+            if thread is None:
+                return
+            try:
+                thread.ready.disconnect(self.preview_frames_ready)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                thread.failed.disconnect(self.preview_frames_failed)
+            except (RuntimeError, TypeError):
+                pass
+            if thread.isRunning():
+                thread.requestInterruption()
+                thread.quit()
+                if not thread.wait(1500):
+                    thread.terminate()
+                    thread.wait(1000)
+            self.preview_thread = None
+            if self.preview_playback.decoder_worker is thread:
+                self.preview_playback.decoder_worker = None
+
+        def _clear_preview_runtime_state(self, clear_canvas: bool = False, log_session: bool = False) -> None:
+            if log_session:
+                self.append_log("[SESSION] ignored unsafe runtime state")
+            self._last_preview_frame_key = None
+            self._preview_sequence_dir = None
+            self._preview_frame_paths = []
+            self._preview_source_hash = None
+            if clear_canvas and self.preview is not None:
+                self.preview.clear()
+                self.preview.setText("Preview")
+
+        def reset_preview_cache(self) -> None:
+            self.preview_playback.reset()
+            self._stop_preview_thread()
+            self._clear_preview_runtime_state(clear_canvas=True, log_session=False)
+            if self.preview_cache_dir.exists():
+                shutil.rmtree(self.preview_cache_dir, ignore_errors=True)
+            self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
+            self.append_log("[PREVIEW] reset controller")
+            self.append_log("[PREVIEW] Cleared preview cache and temp preview files.")
+            if self.current_video_path and self.current_video_path.exists():
+                self.load_selected_video(str(self.current_video_path))
+
+        def closeEvent(self, event) -> None:
+            self.preview_playback.reset()
+            self._stop_preview_thread()
+            super().closeEvent(event)
+
 
         def sync_state_from_controls(self) -> None:
             mode = self.workflow.selected_workflow_mode()

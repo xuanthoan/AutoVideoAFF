@@ -268,7 +268,7 @@ if QWidget:
             return self.motion_speed_ratio(control) if hasattr(control, "currentText") else self.motion_strength_ratio(control)
 
         def _styled_group(self, title: str, object_name: str) -> QGroupBox:
-            group = QGroupBox(title)
+            group = QGroupBox(title.upper())
             group.setObjectName(object_name)
             return group
 
@@ -377,8 +377,8 @@ if QWidget:
             self.setStyleSheet(
                 """
                 QWidget { font-size: 11px; }
-                QGroupBox { color: #e8e8e8; font-weight: 600; margin-top: 6px; padding-top: 4px; border: 1px solid #343a40; border-radius: 5px; background: #181b1f; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
+                QGroupBox { color: #f0f0f0; font-weight: 700; letter-spacing: 0.8px; margin-top: 8px; padding-top: 6px; border: 1px solid #343a40; border-radius: 5px; background: #181b1f; }
+                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; }
                 QGroupBox#panel-pipeline { background: #17202a; border-color: #2d3b4a; }
                 QGroupBox#panel-shuffle { background: #1b1b1b; border-color: #373737; }
                 QGroupBox#panel-image { background: #17231d; border-color: #2c4538; }
