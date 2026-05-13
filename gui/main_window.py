@@ -78,6 +78,10 @@ if QMainWindow:
             self.watermark_layout = WatermarkLayoutEngine()
             self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
             self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
+            self.preview_frame_fps = 6
+            self._last_preview_frame_key: tuple[str, int] | None = None
+            self.manual_cut_undo_stack: list[list[TimelineSegment]] = []
+            self.manual_cut_redo_stack: list[list[TimelineSegment]] = []
             self.log_box = QTextEdit()
             self.log_box.setReadOnly(True)
             self.log_box.setMinimumHeight(140)
@@ -102,11 +106,12 @@ if QMainWindow:
             workflow_layout.addStretch()
             right_scroll = QScrollArea()
             right_scroll.setWidgetResizable(True)
+            right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(540)
-            right_column.setMaximumWidth(660)
+            right_column.setMinimumWidth(500)
+            right_column.setMaximumWidth(620)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
@@ -134,14 +139,11 @@ if QMainWindow:
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
             self.workflow.watermark_enabled.toggled.connect(lambda _checked: self.update_watermark_preview())
-            self.workflow.watermark_text.textChanged.connect(lambda: self.update_watermark_preview())
+            self.workflow.watermark_text.textChanged.connect(self.on_watermark_text_changed)
             self.workflow.watermark_font.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
             self.workflow.watermark_font_size.valueChanged.connect(lambda _value: self.update_watermark_preview())
             self.workflow.watermark_color.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
             self.workflow.watermark_opacity.valueChanged.connect(lambda _value: self.update_watermark_preview())
-            self.workflow.watermark_rotation.valueChanged.connect(lambda _value: self.update_watermark_preview())
-            self.workflow.watermark_random_position.toggled.connect(lambda _checked: self.update_watermark_preview())
-            self.workflow.watermark_slow_motion.toggled.connect(lambda _checked: self.update_watermark_preview())
             self.workflow.watermark_density.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
             self.workflow.template.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.font_size.valueChanged.connect(lambda _value: self.update_text_preview())
@@ -149,7 +151,8 @@ if QMainWindow:
             self.workflow.text_motion_speed.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.text_motion_strength.valueChanged.connect(lambda _value: self.update_text_preview())
             self.workflow.highlight_enabled.toggled.connect(lambda _checked: (self.update_highlight_preview(), self.refresh_timeline()))
-            self.workflow.highlight_text.textChanged.connect(lambda: (self.update_highlight_preview(), self.refresh_timeline()))
+            self.workflow.highlight_text.textChanged.connect(self.on_highlight_text_changed)
+            self.workflow.highlight_font_size.valueChanged.connect(lambda _value: self.update_highlight_preview())
             self.workflow.highlight_style.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
             self.workflow.highlight_animation.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
             self.workflow.changed.connect(self.sync_preview_panel_state)
@@ -167,6 +170,9 @@ if QMainWindow:
             self.timeline.segmentEnabledChanged.connect(self.set_segment_enabled)
             self.timeline.segmentLockedChanged.connect(self.set_segment_locked)
             self.timeline.removeSegmentRequested.connect(self.remove_segment)
+            self.timeline.undoCutRequested.connect(self.undo_manual_cut)
+            self.timeline.redoCutRequested.connect(self.redo_manual_cut)
+            self.timeline.clearManualCutsRequested.connect(self.clear_manual_cuts)
             self.export_button.clicked.connect(self.render)
             self.stop_button.clicked.connect(self.stop_render)
             self.open_output_button.clicked.connect(self.open_output_folder)
@@ -245,6 +251,21 @@ if QMainWindow:
                 self.state.overlays.sticker.y = y
 
 
+        def on_watermark_text_changed(self) -> None:
+            if self.workflow.watermark_text.toPlainText().strip() and not self.workflow.watermark_enabled.isChecked():
+                self.workflow.watermark_enabled.blockSignals(True)
+                self.workflow.watermark_enabled.setChecked(True)
+                self.workflow.watermark_enabled.blockSignals(False)
+            self.update_watermark_preview()
+
+        def on_highlight_text_changed(self) -> None:
+            if self.workflow.highlight_text.toPlainText().strip() and not self.workflow.highlight_enabled.isChecked():
+                self.workflow.highlight_enabled.blockSignals(True)
+                self.workflow.highlight_enabled.setChecked(True)
+                self.workflow.highlight_enabled.blockSignals(False)
+            self.update_highlight_preview()
+            self.refresh_timeline()
+
         def update_watermark_preview(self) -> None:
             watermark = self.state.overlays.watermark
             watermark.text = self.workflow.watermark_text.toPlainText().strip()
@@ -252,9 +273,9 @@ if QMainWindow:
             watermark.set_font_size(self.workflow.watermark_font_size.value())
             watermark.font_color = self.workflow.watermark_color.currentText()
             watermark.opacity_percent = int(self.workflow.watermark_opacity.value())
-            watermark.rotation = float(self.workflow.watermark_rotation.value())
-            watermark.random_position = self.workflow.watermark_random_position.isChecked()
-            watermark.slow_floating_motion = self.workflow.watermark_slow_motion.isChecked()
+            watermark.rotation = -15.0
+            watermark.random_position = True
+            watermark.slow_floating_motion = True
             watermark.density = self.workflow.watermark_density.currentText()  # type: ignore[assignment]
             watermark.enabled = self.workflow.watermark_enabled.isChecked()
             self.state.overlays.watermark_enabled = watermark.active
@@ -293,6 +314,7 @@ if QMainWindow:
             highlight = self.state.overlays.highlight
             highlight.text = self.workflow.highlight_text.toPlainText().strip()
             highlight.style = self.workflow.highlight_style.currentText()
+            highlight.set_font_size(self.workflow.highlight_font_size.value())
             highlight.set_animation_label(self.workflow.highlight_animation.currentText())
             highlight.motion_speed = 1.35
             highlight.motion_strength = 1.45
@@ -334,6 +356,7 @@ if QMainWindow:
 
         def set_playhead_time(self, time_seconds: float) -> None:
             self.timeline.set_playhead_time(time_seconds)
+            self.update_preview_frame(time_seconds)
             self.preview.set_playhead_time(time_seconds)
             self.update_watermark_preview()
             self.update_text_preview()
@@ -439,6 +462,10 @@ if QMainWindow:
             # Keep typing workflow quiet; render logs will show overlay processing when enabled.
 
         def set_video_duration(self, video_path: Path) -> None:
+            if self.current_video_path != video_path:
+                self.manual_cut_undo_stack.clear()
+                self.manual_cut_redo_stack.clear()
+                self._last_preview_frame_key = None
             self.current_video_path = video_path
             try:
                 self.video_duration = max(0.1, probe_duration(video_path))
@@ -490,15 +517,19 @@ if QMainWindow:
             )
             self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="auto") for item in ensured]
             self.state.scene_shuffle.manual_segments = []
+            self.manual_cut_undo_stack.clear()
+            self.manual_cut_redo_stack.clear()
             self.state.scene_shuffle.segment_video_path = str(self.current_video_path)
             self.refresh_timeline()
             self.append_log(f"[SEGMENTS] Generated {len(self.state.scene_shuffle.auto_segments)} auto segments for current video.")
 
         def add_cut_at_time(self, time_seconds: float) -> None:
             cut = min(max(float(time_seconds), 0.0), self.video_duration)
-            segments = self._activate_manual_segments()
-            for index, segment in enumerate(list(segments)):
+            current_segments = self._timeline_segments()
+            for index, segment in enumerate(list(current_segments)):
                 if segment.start_time + 0.05 < cut < segment.end_time - 0.05:
+                    segments = self._activate_manual_segments()
+                    self._push_manual_cut_undo()
                     locked = segment.locked
                     enabled = segment.enabled
                     segments[index:index + 1] = [
@@ -513,6 +544,7 @@ if QMainWindow:
         def set_segment_enabled(self, row: int, enabled: bool) -> None:
             segments = self._activate_manual_segments()
             if 0 <= row < len(segments):
+                self._push_manual_cut_undo()
                 segments[row].enabled = bool(enabled)
                 segments[row].source = "manual"
                 self.refresh_timeline()
@@ -521,6 +553,7 @@ if QMainWindow:
         def set_segment_locked(self, row: int, locked: bool) -> None:
             segments = self._activate_manual_segments()
             if 0 <= row < len(segments):
+                self._push_manual_cut_undo()
                 segments[row].locked = bool(locked)
                 segments[row].source = "manual"
                 self.refresh_timeline()
@@ -529,9 +562,54 @@ if QMainWindow:
         def remove_segment(self, row: int) -> None:
             segments = self._activate_manual_segments()
             if 0 <= row < len(segments):
+                self._push_manual_cut_undo()
                 removed = segments.pop(row)
                 self.refresh_timeline()
                 self.append_log(f"[SEGMENTS] Removed segment {row + 1} ({removed.start_time:.2f}-{removed.end_time:.2f}); manual segment mode active.")
+
+        def _manual_cut_snapshot(self) -> list[TimelineSegment]:
+            return [
+                TimelineSegment(segment.start_time, segment.end_time, "manual", segment.enabled, segment.locked)
+                for segment in self.state.scene_shuffle.manual_segments
+            ]
+
+        def _restore_manual_cut_snapshot(self, snapshot: list[TimelineSegment]) -> None:
+            self.state.scene_shuffle.manual_segments = [
+                TimelineSegment(segment.start_time, segment.end_time, "manual", segment.enabled, segment.locked)
+                for segment in snapshot
+            ]
+            self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.state.scene_shuffle.manual_segments and self.current_video_path else None
+            self.refresh_timeline()
+
+        def _push_manual_cut_undo(self) -> None:
+            self.manual_cut_undo_stack.append(self._manual_cut_snapshot())
+            self.manual_cut_redo_stack.clear()
+
+        def undo_manual_cut(self) -> None:
+            if not self.manual_cut_undo_stack:
+                self.append_log("[SEGMENTS] Không có manual cut để undo.")
+                return
+            self.manual_cut_redo_stack.append(self._manual_cut_snapshot())
+            self._restore_manual_cut_snapshot(self.manual_cut_undo_stack.pop())
+            self.append_log("[SEGMENTS] Undo Cut applied.")
+
+        def redo_manual_cut(self) -> None:
+            if not self.manual_cut_redo_stack:
+                self.append_log("[SEGMENTS] Không có manual cut để redo.")
+                return
+            self.manual_cut_undo_stack.append(self._manual_cut_snapshot())
+            self._restore_manual_cut_snapshot(self.manual_cut_redo_stack.pop())
+            self.append_log("[SEGMENTS] Redo Cut applied.")
+
+        def clear_manual_cuts(self) -> None:
+            if not self.state.scene_shuffle.manual_segments:
+                self.append_log("[SEGMENTS] Không có manual cuts để clear.")
+                return
+            self._push_manual_cut_undo()
+            self.state.scene_shuffle.manual_segments = []
+            self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else None
+            self.refresh_timeline()
+            self.append_log("[SEGMENTS] Cleared manual cuts; Auto Scene Detect mode is active when auto segments are available.")
 
         def preview_shuffle_order(self) -> None:
             segments = [segment for segment in self._timeline_segments() if segment.enabled]
@@ -562,6 +640,8 @@ if QMainWindow:
                 for item in payload.get("segments", [])
             ]
             self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else payload.get("video")
+            self.manual_cut_undo_stack.clear()
+            self.manual_cut_redo_stack.clear()
             self.refresh_timeline()
             self.append_log(f"[SEGMENTS] Loaded {len(self.state.scene_shuffle.manual_segments)} manual segments: {path}")
 
@@ -569,15 +649,26 @@ if QMainWindow:
             if not video_path.exists():
                 self.append_log(f"[WARNING] Không tìm thấy video preview: {video_path}")
                 return
-            cache_name = hashlib.sha1(str(video_path).encode("utf-8")).hexdigest() + ".jpg"
-            preview_path = self.preview_cache_dir / cache_name
+            self._last_preview_frame_key = None
+            self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
+
+        def update_preview_frame(self, time_seconds: float, force: bool = False) -> None:
+            if self.current_video_path is None or not self.current_video_path.exists():
+                return
+            bucket = max(0, int(float(time_seconds) * self.preview_frame_fps))
+            source_hash = hashlib.sha1(str(self.current_video_path).encode("utf-8")).hexdigest()
+            frame_key = (source_hash, bucket)
+            if not force and frame_key == self._last_preview_frame_key:
+                return
+            preview_path = self.preview_cache_dir / f"{source_hash}_{bucket:06d}.jpg"
             try:
                 if not preview_path.exists():
-                    self.preview_renderer.extract_first_valid_frame(video_path, preview_path)
+                    self.preview_renderer.extract_frame_at(self.current_video_path, preview_path, bucket / self.preview_frame_fps)
                 self.preview.set_preview_image(preview_path)
+                self._last_preview_frame_key = frame_key
                 self.update_watermark_preview()
             except Exception as exc:
-                self.append_log(f"[WARNING] Không tạo được preview: {exc}")
+                self.append_log(f"[WARNING] Không tạo được preview frame tại {time_seconds:.2f}s: {exc}")
 
         def sync_state_from_controls(self) -> None:
             mode = self.workflow.selected_workflow_mode()

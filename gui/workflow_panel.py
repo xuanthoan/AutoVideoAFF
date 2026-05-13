@@ -21,6 +21,7 @@ try:
         QPushButton,
         QRadioButton,
         QSpinBox,
+        QSizePolicy,
         QTextEdit,
         QVBoxLayout,
         QWidget,
@@ -28,7 +29,7 @@ try:
 except ImportError:
     Qt = Signal = QColor = QIcon = QPainter = QPen = QPixmap = None
     QButtonGroup = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QFormLayout = QGraphicsOpacityEffect = None
-    QGridLayout = QGroupBox = QHBoxLayout = QListWidget = QPushButton = QRadioButton = QSpinBox = QTextEdit = QVBoxLayout = QWidget = None
+    QGridLayout = QGroupBox = QHBoxLayout = QListWidget = QPushButton = QRadioButton = QSpinBox = QSizePolicy = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.overlays.highlight_library import HIGHLIGHT_ANIMATIONS, HIGHLIGHT_STYLE_NAMES
 from core.overlays.template_manager import TemplateManager, TextTemplate
@@ -86,9 +87,6 @@ if QWidget:
             self.watermark_font_size = QSpinBox(); self.watermark_font_size.setRange(12, 120); self.watermark_font_size.setValue(44)
             self.watermark_color = QComboBox(); self.watermark_color.addItems(WATERMARK_COLORS)
             self.watermark_opacity = QSpinBox(); self.watermark_opacity.setRange(3, 60); self.watermark_opacity.setValue(15); self.watermark_opacity.setSuffix("%")
-            self.watermark_rotation = QSpinBox(); self.watermark_rotation.setRange(-45, 45); self.watermark_rotation.setValue(-15); self.watermark_rotation.setSuffix("°")
-            self.watermark_random_position = QCheckBox("Enable Random Position"); self.watermark_random_position.setChecked(True)
-            self.watermark_slow_motion = QCheckBox("Enable Slow Floating Motion"); self.watermark_slow_motion.setChecked(True)
             self.watermark_density = QComboBox(); self.watermark_density.addItems(WATERMARK_DENSITY_COUNTS.keys())
 
             self.text = QTextEdit(); self.text.setMaximumHeight(58); self.text.setPlaceholderText("Text overlay")
@@ -100,6 +98,7 @@ if QWidget:
 
             self.highlight_enabled = QCheckBox("Enable Highlight")
             self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(42); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
+            self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 160); self.highlight_font_size.setValue(64)
             self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
             self.highlight_animation = QComboBox(); self.highlight_animation.addItems(HIGHLIGHT_ANIMATIONS); self.highlight_animation.setCurrentText("Pop")
 
@@ -116,7 +115,10 @@ if QWidget:
 
             sticker_button = QPushButton("Choose Sticker")
             image_button = QPushButton("Choose Images")
+            self.text_input = self.text
+            self.highlight_input = self.highlight_text
             self._apply_compact_widget_style()
+            self._apply_responsive_control_widths()
 
             root = QHBoxLayout(self)
             root.setContentsMargins(4, 4, 4, 4)
@@ -226,6 +228,7 @@ if QWidget:
             form.setVerticalSpacing(4)
             form.setLabelAlignment(Qt.AlignLeft)
             form.setFormAlignment(Qt.AlignTop)
+            form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
             return form
 
         def _motion_speed_combo(self) -> QComboBox:
@@ -297,9 +300,6 @@ if QWidget:
             form.addRow("Font Size", self.watermark_font_size)
             form.addRow("Font Color", self.watermark_color)
             form.addRow("Opacity", self.watermark_opacity)
-            form.addRow("Rotation", self.watermark_rotation)
-            form.addRow(self.watermark_random_position)
-            form.addRow(self.watermark_slow_motion)
             form.addRow("Density", self.watermark_density)
             return group
 
@@ -319,6 +319,7 @@ if QWidget:
             form = self._compact_form(group)
             form.addRow(self.highlight_enabled)
             form.addRow("Highlight Text", self.highlight_text)
+            form.addRow("Highlight Font Size", self.highlight_font_size)
             form.addRow("Style", self.highlight_style)
             form.addRow("Animation", self.highlight_animation)
             return group
@@ -350,6 +351,18 @@ if QWidget:
 
         def _clamp_overlap(self) -> None:
             self.overlap.setMaximum(min(20, self.image_height.value()))
+
+        def _apply_responsive_control_widths(self) -> None:
+            for widget in (
+                self.image_list, self.watermark_text, self.watermark_font, self.watermark_color, self.watermark_density,
+                self.text, self.template, self.motion, self.highlight_text, self.highlight_style, self.highlight_animation,
+                self.sticker_motion, self.export_panel,
+            ):
+                widget.setMinimumWidth(0)
+                widget.setMaximumWidth(16777215)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            for widget in (self.text, self.highlight_text, self.watermark_text):
+                widget.setLineWrapMode(QTextEdit.WidgetWidth)
 
         def _apply_compact_widget_style(self) -> None:
             self.setStyleSheet(

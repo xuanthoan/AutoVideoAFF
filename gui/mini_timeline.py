@@ -255,6 +255,9 @@ if QWidget:
         segmentEnabledChanged = Signal(int, bool)
         segmentLockedChanged = Signal(int, bool)
         removeSegmentRequested = Signal(int)
+        undoCutRequested = Signal()
+        redoCutRequested = Signal()
+        clearManualCutsRequested = Signal()
 
         def __init__(self) -> None:
             super().__init__()
@@ -268,6 +271,9 @@ if QWidget:
             self.stop_button = QPushButton("Stop")
             self.generate_segments_button = QPushButton("Generate Auto Segments")
             self.add_cut_button = QPushButton("Add Cut")
+            self.undo_cut_button = QPushButton("Undo Cut")
+            self.redo_cut_button = QPushButton("Redo Cut")
+            self.clear_manual_cuts_button = QPushButton("Clear Manual Cuts")
             self.preview_order_button = QPushButton("Preview Shuffle Order")
             self.save_timeline_button = QPushButton("Save Timeline")
             self.load_timeline_button = QPushButton("Load Timeline")
@@ -288,6 +294,9 @@ if QWidget:
             controls.addWidget(self.stop_button)
             controls.addWidget(self.generate_segments_button)
             controls.addWidget(self.add_cut_button)
+            controls.addWidget(self.undo_cut_button)
+            controls.addWidget(self.redo_cut_button)
+            controls.addWidget(self.clear_manual_cuts_button)
             controls.addWidget(self.preview_order_button)
             controls.addWidget(self.save_timeline_button)
             controls.addWidget(self.load_timeline_button)
@@ -309,6 +318,9 @@ if QWidget:
             self.stop_button.clicked.connect(self.stop)
             self.generate_segments_button.clicked.connect(self.generateAutoSegmentsRequested.emit)
             self.add_cut_button.clicked.connect(lambda: self.addCutRequested.emit(self.current_time))
+            self.undo_cut_button.clicked.connect(self.undoCutRequested.emit)
+            self.redo_cut_button.clicked.connect(self.redoCutRequested.emit)
+            self.clear_manual_cuts_button.clicked.connect(self.clearManualCutsRequested.emit)
             self.preview_order_button.clicked.connect(self.previewShuffleOrderRequested.emit)
             self.save_timeline_button.clicked.connect(self.saveTimelineRequested.emit)
             self.load_timeline_button.clicked.connect(self.loadTimelineRequested.emit)
@@ -344,7 +356,9 @@ if QWidget:
             self.overlay_list.blockSignals(False)
             self.tracks.set_items(items)
             if self.tracks.selected_key and self.overlay_list.currentRow() < 0:
+                self.overlay_list.blockSignals(True)
                 self.overlay_list.setCurrentRow(0)
+                self.overlay_list.blockSignals(False)
 
         def set_duration(self, duration: float) -> None:
             self.video_duration = max(0.1, float(duration))
