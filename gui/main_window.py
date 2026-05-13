@@ -24,6 +24,7 @@ from gui.preview_canvas import PreviewCanvas
 from gui.queue_panel import QueuePanel
 from gui.workflow_panel import WorkflowPanel
 from models.overlay import MotionPreset
+from models.highlight_overlay import HighlightOverlay
 from models.project_state import ProjectState, TimelineSegment, WorkflowMode
 from models.sticker_overlay import StickerOverlay
 from utils.ffmpeg_helper import FFmpegNotFoundError, probe_duration
@@ -58,6 +59,27 @@ if QMainWindow:
             self.finishedPaths.emit(outputs)
 
 
+    class PreviewFrameThread(QThread):
+        ready = Signal(str, list)
+        failed = Signal(str, str)
+
+        def __init__(self, video_path: Path, output_dir: Path, fps: int, duration: float) -> None:
+            super().__init__()
+            self.video_path = video_path
+            self.output_dir = output_dir
+            self.fps = fps
+            self.duration = duration
+            self.source_hash = hashlib.sha1(str(video_path).encode("utf-8")).hexdigest()
+
+        def run(self) -> None:
+            try:
+                paths = PreviewRenderer().extract_preview_sequence(self.video_path, self.output_dir, self.fps, self.duration)
+            except Exception as exc:
+                self.failed.emit(self.source_hash, str(exc))
+                return
+            self.ready.emit(self.source_hash, [str(path) for path in paths])
+
+
     class MainWindow(QMainWindow):
         def __init__(self) -> None:
             super().__init__()
@@ -78,8 +100,12 @@ if QMainWindow:
             self.watermark_layout = WatermarkLayoutEngine()
             self.preview_cache_dir = Path(tempfile.gettempdir()) / "autovideoaff_preview"
             self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
-            self.preview_frame_fps = 6
+            self.preview_frame_fps = 12
             self._last_preview_frame_key: tuple[str, int] | None = None
+            self._preview_sequence_dir: Path | None = None
+            self._preview_frame_paths: list[Path] = []
+            self._preview_source_hash: str | None = None
+            self.selected_highlight_index = 0
             self.manual_cut_undo_stack: list[list[TimelineSegment]] = []
             self.manual_cut_redo_stack: list[list[TimelineSegment]] = []
             self.log_box = QTextEdit()
@@ -138,7 +164,6 @@ if QMainWindow:
             self.workflow.stickerSelected.connect(self.set_sticker)
             self.workflow.stickerControlsChanged.connect(self.set_sticker_controls)
             self.workflow.textChanged.connect(self.set_text)
-            self.workflow.watermark_enabled.toggled.connect(lambda _checked: self.update_watermark_preview())
             self.workflow.watermark_text.textChanged.connect(self.on_watermark_text_changed)
             self.workflow.watermark_font.currentTextChanged.connect(lambda _text: self.update_watermark_preview())
             self.workflow.watermark_font_size.valueChanged.connect(lambda _value: self.update_watermark_preview())
@@ -150,11 +175,14 @@ if QMainWindow:
             self.workflow.motion.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.text_motion_speed.currentTextChanged.connect(lambda _text: self.update_text_preview())
             self.workflow.text_motion_strength.valueChanged.connect(lambda _value: self.update_text_preview())
-            self.workflow.highlight_enabled.toggled.connect(lambda _checked: (self.update_highlight_preview(), self.refresh_timeline()))
             self.workflow.highlight_text.textChanged.connect(self.on_highlight_text_changed)
             self.workflow.highlight_font_size.valueChanged.connect(lambda _value: self.update_highlight_preview())
             self.workflow.highlight_style.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
             self.workflow.highlight_animation.currentTextChanged.connect(lambda _text: self.update_highlight_preview())
+            self.workflow.highlight_list.currentRowChanged.connect(self.select_highlight_row)
+            self.workflow.add_highlight_button.clicked.connect(self.add_highlight_layer)
+            self.workflow.remove_highlight_button.clicked.connect(self.remove_selected_highlight)
+            self.workflow.duplicate_highlight_button.clicked.connect(self.duplicate_selected_highlight)
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
@@ -244,25 +272,117 @@ if QMainWindow:
                 self.state.overlays.text.x = x
                 self.state.overlays.text.y = y
             elif kind == "highlight":
-                self.state.overlays.highlight.x = x
-                self.state.overlays.highlight.y = y
+                highlight = self._selected_highlight()
+                highlight.x = x
+                highlight.y = y
+            elif kind.startswith("highlight_"):
+                index = self._highlight_index_from_key(kind)
+                if 0 <= index < len(self.state.overlays.highlight_layers):
+                    self.selected_highlight_index = index
+                    self.state.overlays.highlight_layers[index].x = x
+                    self.state.overlays.highlight_layers[index].y = y
+                    self._load_selected_highlight_controls()
             elif kind == "sticker":
                 self.state.overlays.sticker.x = x
                 self.state.overlays.sticker.y = y
 
 
         def on_watermark_text_changed(self) -> None:
-            if self.workflow.watermark_text.toPlainText().strip() and not self.workflow.watermark_enabled.isChecked():
-                self.workflow.watermark_enabled.blockSignals(True)
-                self.workflow.watermark_enabled.setChecked(True)
-                self.workflow.watermark_enabled.blockSignals(False)
             self.update_watermark_preview()
 
         def on_highlight_text_changed(self) -> None:
-            if self.workflow.highlight_text.toPlainText().strip() and not self.workflow.highlight_enabled.isChecked():
-                self.workflow.highlight_enabled.blockSignals(True)
-                self.workflow.highlight_enabled.setChecked(True)
-                self.workflow.highlight_enabled.blockSignals(False)
+            self.update_highlight_preview()
+            self.refresh_timeline()
+
+        def _ensure_highlight_layers(self) -> list[HighlightOverlay]:
+            if not self.state.overlays.highlight_layers:
+                first = self.state.overlays.highlight
+                if first.end_time <= first.start_time:
+                    first.set_full_duration(self.video_duration)
+                self.state.overlays.highlight_layers.append(first)
+            self.selected_highlight_index = min(max(self.selected_highlight_index, 0), len(self.state.overlays.highlight_layers) - 1)
+            return self.state.overlays.highlight_layers
+
+        def _selected_highlight(self) -> HighlightOverlay:
+            layers = self._ensure_highlight_layers()
+            return layers[self.selected_highlight_index]
+
+        def _highlight_key(self, index: int) -> str:
+            return f"highlight_{index + 1}"
+
+        def _highlight_index_from_key(self, key: str) -> int:
+            if key == "highlight":
+                return self.selected_highlight_index
+            try:
+                return max(0, int(key.split("_", 1)[1]) - 1)
+            except (IndexError, ValueError):
+                return self.selected_highlight_index
+
+        def refresh_highlight_list(self) -> None:
+            self._ensure_highlight_layers()
+            self.workflow.highlight_list.blockSignals(True)
+            self.workflow.highlight_list.clear()
+            for index, overlay in enumerate(self.state.overlays.highlight_layers, start=1):
+                suffix = "" if overlay.text.strip() else " (empty)"
+                self.workflow.highlight_list.addItem(f"Highlight {index}{suffix}")
+            self.workflow.highlight_list.setCurrentRow(self.selected_highlight_index)
+            self.workflow.highlight_list.blockSignals(False)
+
+        def _load_selected_highlight_controls(self) -> None:
+            overlay = self._selected_highlight()
+            self.workflow.highlight_text.blockSignals(True)
+            self.workflow.highlight_font_size.blockSignals(True)
+            self.workflow.highlight_style.blockSignals(True)
+            self.workflow.highlight_animation.blockSignals(True)
+            self.workflow.highlight_text.setPlainText(overlay.text)
+            self.workflow.highlight_font_size.setValue(int(overlay.font_size))
+            self.workflow.highlight_style.setCurrentText(overlay.style)
+            self.workflow.highlight_animation.setCurrentText(overlay.motion.value)
+            self.workflow.highlight_text.blockSignals(False)
+            self.workflow.highlight_font_size.blockSignals(False)
+            self.workflow.highlight_style.blockSignals(False)
+            self.workflow.highlight_animation.blockSignals(False)
+            self.refresh_highlight_list()
+
+        def select_highlight_row(self, row: int) -> None:
+            if row < 0:
+                return
+            self._ensure_highlight_layers()
+            self.selected_highlight_index = min(row, len(self.state.overlays.highlight_layers) - 1)
+            self._load_selected_highlight_controls()
+            self.update_highlight_preview()
+
+        def add_highlight_layer(self) -> None:
+            overlay = HighlightOverlay()
+            overlay.set_font_size(int(self.workflow.highlight_font_size.value()))
+            overlay.set_full_duration(self.video_duration)
+            self.state.overlays.highlight_layers.append(overlay)
+            self.selected_highlight_index = len(self.state.overlays.highlight_layers) - 1
+            self._load_selected_highlight_controls()
+            self.update_highlight_preview()
+            self.refresh_timeline()
+
+        def duplicate_selected_highlight(self) -> None:
+            import copy
+
+            clone = copy.deepcopy(self._selected_highlight())
+            clone.x = min(max(clone.x + 0.05, 0.05), 0.95)
+            clone.y = min(max(clone.y + 0.05, 0.05), 0.95)
+            self.state.overlays.highlight_layers.append(clone)
+            self.selected_highlight_index = len(self.state.overlays.highlight_layers) - 1
+            self._load_selected_highlight_controls()
+            self.update_highlight_preview()
+            self.refresh_timeline()
+
+        def remove_selected_highlight(self) -> None:
+            layers = self._ensure_highlight_layers()
+            if len(layers) == 1:
+                layers[0].text = ""
+                layers[0].enabled = True
+            else:
+                layers.pop(self.selected_highlight_index)
+                self.selected_highlight_index = min(self.selected_highlight_index, len(layers) - 1)
+            self._load_selected_highlight_controls()
             self.update_highlight_preview()
             self.refresh_timeline()
 
@@ -277,7 +397,7 @@ if QMainWindow:
             watermark.random_position = True
             watermark.slow_floating_motion = True
             watermark.density = self.workflow.watermark_density.currentText()  # type: ignore[assignment]
-            watermark.enabled = self.workflow.watermark_enabled.isChecked()
+            watermark.enabled = bool(watermark.text.strip())
             self.state.overlays.watermark_enabled = watermark.active
             if watermark.active:
                 watermark.instances = self.watermark_layout.generate(self.state.overlays, seed=self._current_watermark_seed())
@@ -311,31 +431,36 @@ if QMainWindow:
 
 
         def update_highlight_preview(self) -> None:
-            highlight = self.state.overlays.highlight
+            highlight = self._selected_highlight()
             highlight.text = self.workflow.highlight_text.toPlainText().strip()
             highlight.style = self.workflow.highlight_style.currentText()
             highlight.set_font_size(self.workflow.highlight_font_size.value())
             highlight.set_animation_label(self.workflow.highlight_animation.currentText())
             highlight.motion_speed = 1.35
             highlight.motion_strength = 1.45
-            mode = self.workflow.selected_workflow_mode()
-            active = (
-                mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
-                and self.workflow.highlight_enabled.isChecked()
-                and highlight.active
-            )
-            self.state.overlays.highlight_enabled = active
-            self.preview.set_highlight_overlay(
-                highlight.text,
-                highlight.style,
-                highlight.effective_font_ratio(),
-                active,
-                highlight.motion.value,
-                highlight.motion_speed,
-                highlight.motion_strength,
-            )
-            self.preview.set_overlay_timing("highlight", highlight.start_time, highlight.end_time)
-            self.preview.set_overlay_position("highlight", highlight.x, highlight.y)
+            highlight.enabled = True
+            self.state.overlays.highlight = highlight
+            self.state.overlays.highlight_enabled = any(overlay.active for overlay in self.state.overlays.highlight_layers)
+            layers = []
+            for index, overlay in enumerate(self.state.overlays.highlight_layers):
+                if not overlay.active:
+                    continue
+                layers.append({
+                    "key": self._highlight_key(index),
+                    "text": overlay.text,
+                    "style": overlay.style,
+                    "font_size": overlay.effective_font_ratio(),
+                    "active": True,
+                    "motion": overlay.motion.value,
+                    "motion_speed": overlay.motion_speed,
+                    "motion_strength": overlay.motion_strength,
+                    "x": overlay.x,
+                    "y": overlay.y,
+                    "start": overlay.start_time,
+                    "end": overlay.end_time,
+                })
+            self.preview.set_highlight_layers(layers, selected_key=self._highlight_key(self.selected_highlight_index))
+            self.refresh_highlight_list()
             self.update_watermark_preview()
 
         def update_sticker_preview(self) -> None:
@@ -358,10 +483,6 @@ if QMainWindow:
             self.timeline.set_playhead_time(time_seconds)
             self.update_preview_frame(time_seconds)
             self.preview.set_playhead_time(time_seconds)
-            self.update_watermark_preview()
-            self.update_text_preview()
-            self.update_highlight_preview()
-            self.update_sticker_preview()
 
         def set_overlay_timing(self, key: str, start: float, end: float) -> None:
             overlay = self._overlay_by_key(key)
@@ -378,7 +499,9 @@ if QMainWindow:
         def select_overlay(self, key: str) -> None:
             if key == "text":
                 self.workflow.text.setFocus()
-            elif key == "highlight":
+            elif key == "highlight" or key.startswith("highlight_"):
+                self.selected_highlight_index = self._highlight_index_from_key(key)
+                self._load_selected_highlight_controls()
                 self.workflow.highlight_text.setFocus()
             elif key == "sticker":
                 self.workflow.sticker_scale.setFocus()
@@ -391,9 +514,9 @@ if QMainWindow:
             overlay.enabled = visible
             if key == "text":
                 self.state.overlays.text_enabled = visible and self.state.overlays.text.active
-            elif key == "highlight":
-                self.state.overlays.highlight_enabled = visible and self.state.overlays.highlight.active
-                self.workflow.highlight_enabled.setChecked(visible)
+            elif key == "highlight" or key.startswith("highlight_"):
+                overlay.enabled = visible
+                self.state.overlays.highlight_enabled = any(layer.active for layer in self.state.overlays.highlight_layers)
             elif key == "sticker":
                 self.state.overlays.sticker_enabled = visible and self.state.overlays.sticker.active
             self.update_watermark_preview()
@@ -405,8 +528,10 @@ if QMainWindow:
         def _overlay_by_key(self, key: str):
             if key == "text":
                 return self.state.overlays.text
-            if key == "highlight":
-                return self.state.overlays.highlight
+            if key == "highlight" or key.startswith("highlight_"):
+                index = self._highlight_index_from_key(key)
+                layers = self._ensure_highlight_layers()
+                return layers[index] if 0 <= index < len(layers) else None
             if key == "sticker":
                 return self.state.overlays.sticker
             return None
@@ -424,17 +549,18 @@ if QMainWindow:
                         self.state.overlays.text.enabled,
                     )
                 )
-            if self.state.overlays.highlight.text.strip():
-                items.append(
-                    TimelineOverlayItem(
-                        "highlight",
-                        "highlight",
-                        "Highlight",
-                        self.state.overlays.highlight.start_time,
-                        self.state.overlays.highlight.end_time,
-                        self.state.overlays.highlight.enabled,
+            for index, highlight in enumerate(self.state.overlays.highlight_layers):
+                if highlight.text.strip():
+                    items.append(
+                        TimelineOverlayItem(
+                            self._highlight_key(index),
+                            "highlight",
+                            f"Highlight {index + 1}",
+                            highlight.start_time,
+                            highlight.end_time,
+                            highlight.enabled,
+                        )
                     )
-                )
             if self.state.overlays.sticker.path is not None:
                 items.append(
                     TimelineOverlayItem(
@@ -650,25 +776,40 @@ if QMainWindow:
                 self.append_log(f"[WARNING] Không tìm thấy video preview: {video_path}")
                 return
             self._last_preview_frame_key = None
-            self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
+            source_hash = hashlib.sha1(str(video_path).encode("utf-8")).hexdigest()
+            self._preview_source_hash = source_hash
+            self._preview_sequence_dir = self.preview_cache_dir / source_hash
+            self._preview_frame_paths = sorted(self._preview_sequence_dir.glob("frame_*.jpg")) if self._preview_sequence_dir.exists() else []
+            if self._preview_frame_paths:
+                self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
+                return
+            self.append_log("[PREVIEW] Building lightweight frame cache in background...")
+            self.preview_thread = PreviewFrameThread(video_path, self._preview_sequence_dir, self.preview_frame_fps, self.video_duration)
+            self.preview_thread.ready.connect(self.preview_frames_ready)
+            self.preview_thread.failed.connect(self.preview_frames_failed)
+            self.preview_thread.start()
 
+        def preview_frames_ready(self, source_hash: str, paths: list[str]) -> None:
+            if source_hash != self._preview_source_hash:
+                return
+            self._preview_frame_paths = [Path(path) for path in paths]
+            self.update_preview_frame(self.timeline.current_time if hasattr(self.timeline, "current_time") else 0.05, force=True)
+            self.append_log(f"[PREVIEW] Cached {len(paths)} preview frames at {self.preview_frame_fps} FPS.")
+
+        def preview_frames_failed(self, source_hash: str, message: str) -> None:
+            if source_hash != self._preview_source_hash:
+                return
+            self.append_log(f"[WARNING] Không tạo được preview sequence: {message}")
         def update_preview_frame(self, time_seconds: float, force: bool = False) -> None:
-            if self.current_video_path is None or not self.current_video_path.exists():
+            if not self._preview_frame_paths:
                 return
             bucket = max(0, int(float(time_seconds) * self.preview_frame_fps))
-            source_hash = hashlib.sha1(str(self.current_video_path).encode("utf-8")).hexdigest()
-            frame_key = (source_hash, bucket)
+            index = min(bucket, len(self._preview_frame_paths) - 1)
+            frame_key = (str(self._preview_frame_paths[index]), index)
             if not force and frame_key == self._last_preview_frame_key:
                 return
-            preview_path = self.preview_cache_dir / f"{source_hash}_{bucket:06d}.jpg"
-            try:
-                if not preview_path.exists():
-                    self.preview_renderer.extract_frame_at(self.current_video_path, preview_path, bucket / self.preview_frame_fps)
-                self.preview.set_preview_image(preview_path)
-                self._last_preview_frame_key = frame_key
-                self.update_watermark_preview()
-            except Exception as exc:
-                self.append_log(f"[WARNING] Không tạo được preview frame tại {time_seconds:.2f}s: {exc}")
+            self.preview.set_preview_image(self._preview_frame_paths[index])
+            self._last_preview_frame_key = frame_key
 
         def sync_state_from_controls(self) -> None:
             mode = self.workflow.selected_workflow_mode()
@@ -688,7 +829,7 @@ if QMainWindow:
             overlay_pipeline = mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4}
             self.update_watermark_preview()
             self.state.overlays.text_enabled = overlay_pipeline and bool(self.state.overlays.text.text.strip())
-            self.state.overlays.highlight_enabled = overlay_pipeline and self.workflow.highlight_enabled.isChecked() and bool(self.state.overlays.highlight.text.strip())
+            self.state.overlays.highlight_enabled = any(overlay.active for overlay in self.state.overlays.highlight_layers)
             self.state.overlays.sticker_enabled = overlay_pipeline and self.state.overlays.sticker.path is not None
             self.state.overlays.text.template = self.workflow.template.currentText()
             self.state.overlays.text.set_font_size(self.workflow.font_size.value())

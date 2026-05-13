@@ -38,7 +38,7 @@ from models.watermark_overlay import WATERMARK_COLORS, WATERMARK_DENSITY_COUNTS,
 
 
 PIPELINE_CONFIG = {
-    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "watermark": True, "text": False, "highlight": False, "sticker": False},
+    WorkflowMode.PIPELINE_1: {"shuffle": True, "image": True, "watermark": True, "text": False, "highlight": True, "sticker": False},
     WorkflowMode.PIPELINE_2: {"shuffle": True, "image": True, "watermark": True, "text": True, "highlight": True, "sticker": True},
     WorkflowMode.PIPELINE_3: {"shuffle": True, "image": False, "watermark": True, "text": True, "highlight": True, "sticker": True},
     WorkflowMode.PIPELINE_4: {"shuffle": False, "image": False, "watermark": True, "text": True, "highlight": True, "sticker": True},
@@ -81,7 +81,6 @@ if QWidget:
             self.crop_focus = QComboBox(); self.crop_focus.addItems(["top", "center", "bottom"]); self.crop_focus.setCurrentText("center")
             self.fade_curve = QComboBox(); self.fade_curve.addItems(["linear", "smooth", "strong"]); self.fade_curve.setCurrentText("smooth")
 
-            self.watermark_enabled = QCheckBox("Enable Watermark")
             self.watermark_text = QTextEdit(); self.watermark_text.setMaximumHeight(42); self.watermark_text.setPlaceholderText("@shopabc, TikTok: @abc, MY BRAND...")
             self.watermark_font = QComboBox(); self.watermark_font.addItems(WATERMARK_FONTS)
             self.watermark_font_size = QSpinBox(); self.watermark_font_size.setRange(12, 120); self.watermark_font_size.setValue(44)
@@ -96,7 +95,10 @@ if QWidget:
             self.text_motion_speed = self._motion_speed_combo()
             self.text_motion_strength = self._motion_strength_spinbox()
 
-            self.highlight_enabled = QCheckBox("Enable Highlight")
+            self.highlight_list = QListWidget(); self.highlight_list.setMaximumHeight(64)
+            self.add_highlight_button = QPushButton("Add Highlight")
+            self.remove_highlight_button = QPushButton("Remove Selected Highlight")
+            self.duplicate_highlight_button = QPushButton("Duplicate Highlight")
             self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(42); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
             self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 160); self.highlight_font_size.setValue(64)
             self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
@@ -108,7 +110,7 @@ if QWidget:
             self.sticker_motion_speed = self._motion_speed_combo()
             self.sticker_motion_strength = self._motion_strength_spinbox()
 
-            self.export_panel = QGroupBox("──────── EXPORT ────────")
+            self.export_panel = self._styled_group("Export", "panel-export")
             self.export_layout = QVBoxLayout(self.export_panel)
             self.export_layout.setContentsMargins(6, 8, 6, 6)
             self.export_layout.setSpacing(5)
@@ -265,15 +267,20 @@ if QWidget:
         def slider_ratio(self, control) -> float:
             return self.motion_speed_ratio(control) if hasattr(control, "currentText") else self.motion_strength_ratio(control)
 
+        def _styled_group(self, title: str, object_name: str) -> QGroupBox:
+            group = QGroupBox(title)
+            group.setObjectName(object_name)
+            return group
+
         def _pipeline_group(self):
-            group = QGroupBox("──────── PIPELINE ────────")
+            group = self._styled_group("Pipeline", "panel-pipeline")
             form = self._compact_form(group)
             for mode in WorkflowMode:
                 form.addRow(self.pipeline_buttons[mode])
             return group
 
         def _scene_group(self):
-            group = QGroupBox("──────── SHUFFLE ────────")
+            group = self._styled_group("Shuffle", "panel-shuffle")
             form = self._compact_form(group)
             form.addRow("Sensitivity", self.scene_sensitivity)
             form.addRow("Fallback Minimum", self.fallback_min)
@@ -281,7 +288,7 @@ if QWidget:
             return group
 
         def _image_group(self, button):
-            group = QGroupBox("──────── IMAGE ────────")
+            group = self._styled_group("Image", "panel-image")
             form = self._compact_form(group)
             form.addRow(button)
             form.addRow("Crop Focus", self.crop_focus)
@@ -292,9 +299,8 @@ if QWidget:
             return group
 
         def _watermark_group(self):
-            group = QGroupBox("──────── WATERMARK ────────")
+            group = self._styled_group("Watermark", "panel-watermark")
             form = self._compact_form(group)
-            form.addRow(self.watermark_enabled)
             form.addRow("Watermark Text", self.watermark_text)
             form.addRow("Font", self.watermark_font)
             form.addRow("Font Size", self.watermark_font_size)
@@ -304,7 +310,7 @@ if QWidget:
             return group
 
         def _text_group(self):
-            group = QGroupBox("──────── TEXT ────────")
+            group = self._styled_group("Text", "panel-text")
             form = self._compact_form(group)
             form.addRow("Text", self.text)
             form.addRow("Template", self.template)
@@ -315,9 +321,12 @@ if QWidget:
             return group
 
         def _highlight_group(self):
-            group = QGroupBox("──────── HIGHLIGHT ────────")
+            group = self._styled_group("Highlight", "panel-highlight")
             form = self._compact_form(group)
-            form.addRow(self.highlight_enabled)
+            form.addRow("Highlights", self.highlight_list)
+            form.addRow(self.add_highlight_button)
+            form.addRow(self.duplicate_highlight_button)
+            form.addRow(self.remove_highlight_button)
             form.addRow("Highlight Text", self.highlight_text)
             form.addRow("Highlight Font Size", self.highlight_font_size)
             form.addRow("Style", self.highlight_style)
@@ -325,7 +334,7 @@ if QWidget:
             return group
 
         def _sticker_group(self, button):
-            group = QGroupBox("──────── STICKER ────────")
+            group = self._styled_group("Sticker", "panel-sticker")
             form = self._compact_form(group)
             form.addRow(button)
             form.addRow("Scale", self.sticker_scale)
@@ -355,8 +364,8 @@ if QWidget:
         def _apply_responsive_control_widths(self) -> None:
             for widget in (
                 self.image_list, self.watermark_text, self.watermark_font, self.watermark_color, self.watermark_density,
-                self.text, self.template, self.motion, self.highlight_text, self.highlight_style, self.highlight_animation,
-                self.sticker_motion, self.export_panel,
+                self.text, self.template, self.motion, self.highlight_list, self.highlight_text, self.highlight_style, self.highlight_animation,
+                self.add_highlight_button, self.remove_highlight_button, self.duplicate_highlight_button, self.sticker_motion, self.export_panel,
             ):
                 widget.setMinimumWidth(0)
                 widget.setMaximumWidth(16777215)
@@ -368,8 +377,16 @@ if QWidget:
             self.setStyleSheet(
                 """
                 QWidget { font-size: 11px; }
-                QGroupBox { color: #e8e8e8; font-weight: 600; margin-top: 6px; padding-top: 4px; border: 1px solid #333; border-radius: 4px; }
-                QGroupBox::title { subcontrol-origin: margin; left: 6px; padding: 0 3px; }
+                QGroupBox { color: #e8e8e8; font-weight: 600; margin-top: 6px; padding-top: 4px; border: 1px solid #343a40; border-radius: 5px; background: #181b1f; }
+                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
+                QGroupBox#panel-pipeline { background: #17202a; border-color: #2d3b4a; }
+                QGroupBox#panel-shuffle { background: #1b1b1b; border-color: #373737; }
+                QGroupBox#panel-image { background: #17231d; border-color: #2c4538; }
+                QGroupBox#panel-watermark { background: #171d24; border-color: #304050; }
+                QGroupBox#panel-text { background: #201a27; border-color: #3f344b; }
+                QGroupBox#panel-highlight { background: #252014; border-color: #4a3e25; }
+                QGroupBox#panel-sticker { background: #142321; border-color: #294845; }
+                QGroupBox#panel-export { background: #1b1b1d; border-color: #383a3d; }
                 QPushButton, QComboBox, QSpinBox, QDoubleSpinBox { min-height: 28px; max-height: 32px; }
                 QTextEdit, QListWidget { border: 1px solid #333; border-radius: 3px; }
                 QCheckBox, QRadioButton { min-height: 22px; }

@@ -53,6 +53,8 @@ if QLabel:
             self._highlight_pixmap_cache = None
             self._watermark_pixmap_cache_key = None
             self._watermark_pixmap_cache = None
+            self._typography_pixmap_cache = {}
+            self._selected_highlight_key: str | None = None
             self._last_motion_debug: dict[str, float] = {}
             self._overlays = {
                 "watermark": {"active": False, "x": 0.5, "y": 0.5, "w": 160, "h": 48, "text": "", "font_family": "Montserrat", "font_size": 44/1920, "font_color": "#FFFFFF", "opacity": 0.15, "rotation": -15.0, "slow_floating_motion": True, "instances": []},
@@ -142,6 +144,29 @@ if QLabel:
             })
             self.update()
 
+        def set_highlight_layers(self, layers: list[dict], selected_key: str | None = None) -> None:
+            for key in [key for key in self._overlays if key.startswith("highlight_")]:
+                self._overlays.pop(key, None)
+            self._selected_highlight_key = selected_key
+            for index, layer in enumerate(layers, start=1):
+                key = str(layer.get("key", f"highlight_{index}"))
+                self._overlays[key] = {
+                    "active": layer.get("active", False),
+                    "x": layer.get("x", 0.5),
+                    "y": layer.get("y", 0.25),
+                    "w": 280,
+                    "h": 96,
+                    "text": layer.get("text", ""),
+                    "template": layer.get("style", "TikTok Bold"),
+                    "font_size": layer.get("font_size", 118 / 1920),
+                    "motion": layer.get("motion", "Pop"),
+                    "motion_speed": layer.get("motion_speed", 1.25),
+                    "motion_strength": layer.get("motion_strength", 1.35),
+                    "start": layer.get("start", 0.0),
+                    "end": layer.get("end", 3.0),
+                }
+            self.update()
+
         def set_sticker_overlay(
             self,
             path: Path | None,
@@ -196,7 +221,8 @@ if QLabel:
         def mousePressEvent(self, event):
             if event.button() != Qt.LeftButton:
                 return super().mousePressEvent(event)
-            for kind in ("sticker", "highlight", "text"):
+            highlight_keys = [key for key in self._overlays if key.startswith("highlight_")]
+            for kind in ("sticker", *highlight_keys, "highlight", "text"):
                 if self._overlay_rect(kind).contains(event.position()):
                     self._drag_kind = kind
                     return
@@ -305,21 +331,24 @@ if QLabel:
                     self._emit_motion_debug("watermark", {"motion": "Slow Floating" if data.get("slow_floating_motion", True) else "None", "x": instance.x, "y": instance.y}, SimpleNamespace(x_offset=x_offset, y_offset=y_offset, scale=instance.scale, opacity=float(data["opacity"]) * float(instance.opacity_multiplier), rotation_delta=instance.rotation))
 
         def _draw_text_overlay(self, painter: QPainter) -> None:
-            self._draw_typography_overlay(painter, "text", self._template_manager)
+            self._draw_typography_data(painter, "text", self._overlays["text"], self._template_manager)
 
         def _draw_highlight_overlay(self, painter: QPainter) -> None:
-            self._draw_typography_overlay(painter, "highlight", self._highlight_style_manager)
+            highlight_keys = [key for key in self._overlays if key.startswith("highlight_")]
+            if highlight_keys:
+                for key in highlight_keys:
+                    self._draw_typography_data(painter, key, self._overlays[key], self._highlight_style_manager)
+            else:
+                self._draw_typography_data(painter, "highlight", self._overlays["highlight"], self._highlight_style_manager)
 
-        def _draw_typography_overlay(self, painter: QPainter, kind: str, template_manager) -> None:
-            data = self._overlays[kind]
+        def _draw_typography_data(self, painter: QPainter, kind: str, data: dict, template_manager) -> None:
             if not self._overlay_visible(data) or not str(data["text"]).strip():
                 return
             template = template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
             key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
-            cache_attr = "_highlight_pixmap_cache" if kind == "highlight" else "_text_pixmap_cache"
-            key_attr = "_highlight_pixmap_cache_key" if kind == "highlight" else "_text_pixmap_cache_key"
-            if key != getattr(self, key_attr) or getattr(self, cache_attr) is None:
+            pixmap = self._typography_pixmap_cache.get(key)
+            if pixmap is None:
                 image = self._typography_renderer.render_image(
                     str(data["text"]),
                     template,
@@ -327,9 +356,8 @@ if QLabel:
                     round(canvas.width()),
                     round(canvas.height()),
                 )
-                setattr(self, cache_attr, QPixmap.fromImage(image))
-                setattr(self, key_attr, key)
-            pixmap = getattr(self, cache_attr)
+                pixmap = QPixmap.fromImage(image)
+                self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
             transformed, transform = self._preview_transform(data, pixmap, canvas)
@@ -340,6 +368,10 @@ if QLabel:
             painter.save()
             painter.setOpacity(transform.opacity)
             painter.drawPixmap(QPointF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2), transformed)
+            if kind == self._selected_highlight_key:
+                painter.setOpacity(1.0)
+                painter.setPen(QPen(QColor(255, 220, 80, 210), 2, Qt.DashLine))
+                painter.drawRect(QRectF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2, transformed.width(), transformed.height()))
             painter.restore()
             self._emit_motion_debug(kind, data, transform)
 

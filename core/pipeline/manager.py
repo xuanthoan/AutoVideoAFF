@@ -32,7 +32,7 @@ class PipelineManager:
         if state.workflow_mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2}:
             if self.image.enabled(state):
                 modules.append(self.image)
-        if state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} or state.overlays.watermark_enabled:
+        if state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} or state.overlays.watermark_enabled or state.overlays.highlight_enabled:
             if self.overlay.enabled(state):
                 modules.append(self.overlay)
         modules.append(self.export)

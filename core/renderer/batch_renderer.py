@@ -81,7 +81,7 @@ class BatchRenderer:
                     self._log(log, "INFO", "Shuffling video segments only...")
                 if state.workflow_mode in {WorkflowMode.PIPELINE_1, WorkflowMode.PIPELINE_2} and state.image_composite.enabled:
                     self._log(log, "INFO", "Applying image composite...")
-                if state.overlays.enabled and (state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} or state.overlays.watermark_enabled):
+                if state.overlays.enabled and (state.workflow_mode in {WorkflowMode.PIPELINE_2, WorkflowMode.PIPELINE_3, WorkflowMode.PIPELINE_4} or state.overlays.watermark_enabled or state.overlays.highlight_enabled):
                     self._log(log, "INFO", "Rendering overlays...")
                 self._log(log, "INFO", "Exporting final video...")
                 render_state = self._state_for_video(state, video)
