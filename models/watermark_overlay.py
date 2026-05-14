@@ -44,8 +44,8 @@ class WatermarkOverlay:
     rotation: float = -15.0
     random_position: bool = True
     slow_floating_motion: bool = True
-    density: WatermarkDensity = "single"
-    instances: list[WatermarkInstance] = field(default_factory=lambda: [WatermarkInstance(0.5, 0.5, 0.0)])
+    density: WatermarkDensity = "multi-light"
+    instances: list[WatermarkInstance] = field(default_factory=lambda: [WatermarkInstance(0.38, 0.38, 0.0), WatermarkInstance(0.62, 0.62, 0.0)])
 
     @property
     def active(self) -> bool:

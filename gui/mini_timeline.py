@@ -6,9 +6,9 @@ from dataclasses import dataclass
 try:
     from PySide6.QtCore import QRectF, Qt, Signal
     from PySide6.QtGui import QColor, QPainter, QPen
-    from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 except ImportError:  # keep non-GUI imports lightweight in CI
-    QRectF = Qt = Signal = QColor = QPainter = QPen = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QVBoxLayout = QWidget = None
+    QRectF = Qt = Signal = QColor = QPainter = QPen = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QScrollArea = QSizePolicy = QVBoxLayout = QWidget = None
 
 
 @dataclass(slots=True)
@@ -54,8 +54,8 @@ if QWidget:
 
         def __init__(self) -> None:
             super().__init__()
-            self.setMinimumHeight(104)
-            self.setMaximumHeight(138)
+            self.setMinimumHeight(188)
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
             self.setMouseTracking(True)
             self.setStyleSheet("background:#151515;border:1px solid #303030;border-radius:6px;")
             self.items: list[TimelineOverlayItem] = []
@@ -67,12 +67,14 @@ if QWidget:
             self._mode: str | None = None
             self._drag_key: str | None = None
             self._drag_offset = 0.0
+            self._base_width = 900
+            self._refresh_geometry()
 
         def set_items(self, items: list[TimelineOverlayItem]) -> None:
-            self.items = items[:20]
+            self.items = items[:100]
             if self.selected_key not in {item.key for item in self.items}:
                 self.selected_key = self.items[0].key if self.items else None
-            self.update()
+            self._refresh_geometry()
 
         def set_segments(self, segments: list[SegmentTimelineItem]) -> None:
             self.segments = segments[:200]
@@ -80,16 +82,19 @@ if QWidget:
 
         def set_zoom(self, zoom_factor: float) -> None:
             self.zoom_factor = min(max(float(zoom_factor), 1.0), 8.0)
-            self.update()
+            self._refresh_geometry()
 
         def set_duration(self, duration: float) -> None:
             self.video_duration = max(0.1, float(duration))
             self.playhead_time = min(self.playhead_time, self.video_duration)
-            self.update()
+            self._refresh_geometry()
 
         def set_playhead(self, time_seconds: float) -> None:
+            old_x = int(self._time_to_x(self.playhead_time))
             self.playhead_time = min(max(float(time_seconds), 0.0), self.video_duration)
-            self.update()
+            new_x = int(self._time_to_x(self.playhead_time))
+            self.update(max(0, old_x - 3), 0, 7, self.height())
+            self.update(max(0, new_x - 3), 0, 7, self.height())
 
         def select_overlay(self, key: str) -> None:
             self.selected_key = key
@@ -103,10 +108,14 @@ if QWidget:
             painter.setPen(QColor("#737373"))
             painter.drawText(8, 17, "SEGMENTS")
             self._draw_segments(painter)
-            for idx, item in enumerate(self.items):
+            first_row = max(0, int((event.rect().top() - 25) // (self.TRACK_HEIGHT + self.TRACK_GAP)))
+            last_row = min(len(self.items), int((event.rect().bottom() - 25) // (self.TRACK_HEIGHT + self.TRACK_GAP)) + 2)
+            for idx in range(first_row, last_row):
+                item = self.items[idx]
                 y = self._row_y(idx)
                 painter.setPen(QColor("#a8a8a8" if item.visible else "#666"))
                 painter.drawText(8, int(y + 18), item.label)
+                painter.setBrush(Qt.NoBrush)
                 painter.setPen(QPen(QColor("#2a2a2a"), 1))
                 painter.drawRoundedRect(QRectF(self.LEFT_GUTTER, y, area, self.TRACK_HEIGHT), 4, 4)
                 rect = self._item_rect(item, idx)
@@ -231,8 +240,17 @@ if QWidget:
             end_x = self._time_to_x(item.end)
             return QRectF(start_x, self._row_y(index), max(8, end_x - start_x), self.TRACK_HEIGHT)
 
+        def _refresh_geometry(self) -> None:
+            rows_height = 32 + len(self.items) * (self.TRACK_HEIGHT + self.TRACK_GAP) + 10
+            height = max(188, rows_height)
+            width = max(self._base_width, int(self._base_width * self.zoom_factor))
+            self.setMinimumSize(width, height)
+            self.resize(width, height)
+            self.updateGeometry()
+            self.update()
+
         def _track_area_width(self) -> float:
-            return max(1.0, self.width() - self.LEFT_GUTTER - self.RIGHT_PAD) * self.zoom_factor
+            return max(1.0, self.width() - self.LEFT_GUTTER - self.RIGHT_PAD)
 
         def _time_to_x(self, time_seconds: float) -> float:
             return self.LEFT_GUTTER + (min(max(time_seconds, 0.0), self.video_duration) / self.video_duration) * self._track_area_width()
@@ -264,8 +282,9 @@ if QWidget:
 
         def __init__(self) -> None:
             super().__init__()
-            self.setMinimumHeight(120)
-            self.setMaximumHeight(180)
+            self.setMinimumHeight(280)
+            self.setMaximumHeight(460)
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self.setStyleSheet("QWidget{background:#101010;color:#dedede;} QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;}")
             self.current_time = 0.0
             self.video_duration = 6.0
@@ -288,6 +307,12 @@ if QWidget:
             self.segment_list.setMinimumWidth(260)
             self.segment_list.setToolTip("# | Start | End | Duration | Lock | Enable | Type")
             self.tracks = MiniTimelineTracks()
+            self.track_scroll = QScrollArea()
+            self.track_scroll.setWidgetResizable(False)
+            self.track_scroll.setWidget(self.tracks)
+            self.track_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.track_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.track_scroll.setMinimumHeight(188)
             controls = QHBoxLayout()
             controls.setContentsMargins(0, 0, 0, 0)
             controls.setSpacing(4)
@@ -308,7 +333,7 @@ if QWidget:
             left.setContentsMargins(0, 0, 0, 0)
             left.setSpacing(4)
             left.addLayout(controls)
-            left.addWidget(self.tracks, 1)
+            left.addWidget(self.track_scroll, 1)
             layout = QHBoxLayout(self)
             layout.setContentsMargins(6, 4, 6, 4)
             layout.setSpacing(6)
@@ -349,7 +374,7 @@ if QWidget:
         def set_items(self, items: list[TimelineOverlayItem]) -> None:
             self.overlay_list.blockSignals(True)
             self.overlay_list.clear()
-            for item in items[:20]:
+            for item in items[:100]:
                 row_item = QListWidgetItem(item.label)
                 row_item.setFlags(row_item.flags() | Qt.ItemIsUserCheckable)
                 row_item.setCheckState(Qt.Checked if item.visible else Qt.Unchecked)

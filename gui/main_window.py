@@ -259,8 +259,8 @@ if QMainWindow:
             center_layout = QVBoxLayout(center_column)
             center_layout.setContentsMargins(0, 0, 0, 0)
             center_layout.setSpacing(6)
-            center_layout.addWidget(self._panel("PREVIEW", self.preview, "panel-preview"), 1)
-            center_layout.addWidget(self._panel("TIMELINE", self.timeline, "panel-timeline"), 0)
+            center_layout.addWidget(self._panel("PREVIEW", self.preview, "panel-preview"), 64)
+            center_layout.addWidget(self._panel("TIMELINE", self.timeline, "panel-timeline"), 36)
 
             layout.setContentsMargins(6, 6, 6, 6)
             layout.setSpacing(8)

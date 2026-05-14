@@ -86,7 +86,7 @@ if QWidget:
             self.watermark_font_size = QSpinBox(); self.watermark_font_size.setRange(12, 120); self.watermark_font_size.setValue(44)
             self.watermark_color = QComboBox(); self.watermark_color.addItems(WATERMARK_COLORS)
             self.watermark_opacity = QSpinBox(); self.watermark_opacity.setRange(3, 60); self.watermark_opacity.setValue(15); self.watermark_opacity.setSuffix("%")
-            self.watermark_density = QComboBox(); self.watermark_density.addItems(WATERMARK_DENSITY_COUNTS.keys())
+            self.watermark_density = QComboBox(); self.watermark_density.addItems(WATERMARK_DENSITY_COUNTS.keys()); self.watermark_density.setCurrentText("multi-light")
 
             self.text = QTextEdit(); self.text.setMaximumHeight(58); self.text.setPlaceholderText("Text overlay")
             self.template = QComboBox(); self._populate_template_combo()
@@ -111,9 +111,9 @@ if QWidget:
             self.sticker_motion_strength = self._motion_strength_spinbox()
 
             self.export_panel = self._styled_group("Export", "panel-export")
-            self.export_layout = QVBoxLayout(self.export_panel)
-            self.export_layout.setContentsMargins(6, 8, 6, 6)
-            self.export_layout.setSpacing(5)
+            self.export_layout = QHBoxLayout(self.export_panel)
+            self.export_layout.setContentsMargins(8, 10, 8, 8)
+            self.export_layout.setSpacing(8)
 
             sticker_button = QPushButton("Choose Sticker")
             image_button = QPushButton("Choose Images")
@@ -122,9 +122,10 @@ if QWidget:
             self._apply_compact_widget_style()
             self._apply_responsive_control_widths()
 
-            root = QHBoxLayout(self)
+            root = QGridLayout(self)
             root.setContentsMargins(4, 4, 4, 4)
-            root.setSpacing(8)
+            root.setHorizontalSpacing(8)
+            root.setVerticalSpacing(8)
             left_column = QVBoxLayout(); left_column.setSpacing(8); left_column.setContentsMargins(0, 0, 0, 0)
             right_column = QVBoxLayout(); right_column.setSpacing(8); right_column.setContentsMargins(0, 0, 0, 0)
 
@@ -139,11 +140,16 @@ if QWidget:
             for group in (self.pipeline_panel, self.shuffle_panel, self.image_panel, self.watermark_panel):
                 left_column.addWidget(group)
             left_column.addStretch(1)
-            for group in (self.text_panel, self.highlight_panel, self.sticker_panel, self.export_panel):
+            for group in (self.text_panel, self.highlight_panel, self.sticker_panel):
                 right_column.addWidget(group)
             right_column.addStretch(1)
-            root.addLayout(left_column, 1)
-            root.addLayout(right_column, 1)
+            root.addLayout(left_column, 0, 0)
+            root.addLayout(right_column, 0, 1)
+            root.addWidget(self.export_panel, 1, 0, 1, 2)
+            root.setColumnStretch(0, 1)
+            root.setColumnStretch(1, 1)
+            root.setRowStretch(0, 1)
+            root.setRowStretch(1, 0)
 
             self._ui_ready = True
             self._connect_signals(image_button, sticker_button)
@@ -152,8 +158,9 @@ if QWidget:
         def set_export_controls(self, render_button: QPushButton, stop_button: QPushButton, open_output_button: QPushButton) -> None:
             for button in (render_button, stop_button, open_output_button):
                 button.setMinimumHeight(32)
-                button.setMaximumHeight(34)
-                self.export_layout.addWidget(button)
+                button.setMaximumHeight(36)
+                button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                self.export_layout.addWidget(button, 1)
 
         def _connect_signals(self, image_button: QPushButton, sticker_button: QPushButton) -> None:
             for button in self.pipeline_buttons.values():

@@ -30,7 +30,7 @@ if QLabel:
 
         def __init__(self) -> None:
             super().__init__("Preview")
-            self.setMinimumSize(520, 780)
+            self.setMinimumSize(420, 560)
             self.setAlignment(Qt.AlignCenter)
             self.setMouseTracking(True)
             self.setStyleSheet("background:#111;color:#aaa;border:1px solid #333;")
