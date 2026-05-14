@@ -33,7 +33,7 @@ if QWidget:
             layout = QVBoxLayout(self)
             layout.setContentsMargins(4, 4, 4, 4)
             layout.setSpacing(5)
-            self.setStyleSheet("QPushButton { min-height: 30px; max-height: 34px; } QListWidget { border:1px solid #333; }")
+            self.setStyleSheet("QWidget{background:#FFFFFF;color:#1F2937;} QPushButton { min-height: 29px; max-height: 33px; padding:3px 8px; border-radius:6px; border:1px solid #CBD5E1; background:#FFFFFF; color:#1F2937; } QPushButton:hover{background:#EEF4FF;border-color:#93C5FD;} QListWidget { border:1px solid #D9DCE3; border-radius:5px; background:#FAFAFB; color:#1F2937; }")
             layout.addWidget(self.list, 1)
             for widget in (add_video, add_folder, remove, clear):
                 layout.addWidget(widget, 0)

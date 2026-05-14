@@ -6,9 +6,9 @@ from dataclasses import dataclass
 try:
     from PySide6.QtCore import QRectF, Qt, Signal
     from PySide6.QtGui import QColor, QPainter, QPen
-    from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 except ImportError:  # keep non-GUI imports lightweight in CI
-    QRectF = Qt = Signal = QColor = QPainter = QPen = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QScrollArea = QSizePolicy = QVBoxLayout = QWidget = None
+    QRectF = Qt = Signal = QColor = QPainter = QPen = QGridLayout = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QPushButton = QScrollArea = QSizePolicy = QVBoxLayout = QWidget = None
 
 
 @dataclass(slots=True)
@@ -285,7 +285,7 @@ if QWidget:
             self.setMinimumHeight(280)
             self.setMaximumHeight(460)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            self.setStyleSheet("QWidget{background:#101010;color:#dedede;} QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;}")
+            self.setStyleSheet("QWidget{background:#181A1F;color:#E5E7EB;} QPushButton{background:#242832;color:#F3F4F6;border:1px solid #3B424F;padding:2px 6px;border-radius:5px;min-height:24px;} QPushButton:hover{background:#2F3747;border-color:#4F8EF7;} QListWidget{background:#20242C;color:#E5E7EB;border:1px solid #3B424F;border-radius:5px;}")
             self.current_time = 0.0
             self.video_duration = 6.0
             self._is_playback_requested = False
@@ -313,22 +313,24 @@ if QWidget:
             self.track_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             self.track_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             self.track_scroll.setMinimumHeight(188)
-            controls = QHBoxLayout()
+            controls = QGridLayout()
             controls.setContentsMargins(0, 0, 0, 0)
-            controls.setSpacing(4)
-            controls.addWidget(self.play_button)
-            controls.addWidget(self.pause_button)
-            controls.addWidget(self.stop_button)
-            controls.addWidget(self.generate_segments_button)
-            controls.addWidget(self.add_cut_button)
-            controls.addWidget(self.undo_cut_button)
-            controls.addWidget(self.redo_cut_button)
-            controls.addWidget(self.clear_manual_cuts_button)
-            controls.addWidget(self.preview_order_button)
-            controls.addWidget(self.save_timeline_button)
-            controls.addWidget(self.load_timeline_button)
-            controls.addWidget(self.time_label)
-            controls.addStretch()
+            controls.setHorizontalSpacing(3)
+            controls.setVerticalSpacing(3)
+            toolbar_buttons = (
+                self.play_button, self.pause_button, self.stop_button, self.generate_segments_button,
+                self.add_cut_button, self.undo_cut_button, self.redo_cut_button, self.clear_manual_cuts_button,
+                self.preview_order_button, self.save_timeline_button, self.load_timeline_button,
+            )
+            for button in toolbar_buttons:
+                button.setMinimumWidth(button.fontMetrics().horizontalAdvance(button.text()) + 18)
+                button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            for column, button in enumerate(toolbar_buttons[:6]):
+                controls.addWidget(button, 0, column)
+            for column, button in enumerate(toolbar_buttons[6:]):
+                controls.addWidget(button, 1, column)
+            controls.addWidget(self.time_label, 1, 5)
+            controls.setColumnStretch(5, 1)
             left = QVBoxLayout()
             left.setContentsMargins(0, 0, 0, 0)
             left.setSpacing(4)

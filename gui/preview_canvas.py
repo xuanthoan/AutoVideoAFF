@@ -36,6 +36,7 @@ if QLabel:
             self.setStyleSheet("background:#111;color:#aaa;border:1px solid #333;")
             self._snap_x: int | None = None
             self._snap_y: int | None = None
+            self._snap_guides: list[tuple[str, int]] = []
             self._source_pixmap: QPixmap | None = None
             self._safe_area_engine = SafeAreaEngine()
             self._safe_area_platform = "TikTok"
@@ -238,12 +239,18 @@ if QLabel:
             center_y = canvas.center().y()
             self._snap_x = None
             self._snap_y = None
-            if self._snap_enabled and abs(x - center_x) <= self.SNAP_THRESHOLD:
-                x = center_x
-                self._snap_x = int(center_x)
-            if self._snap_enabled and abs(y - center_y) <= self.SNAP_THRESHOLD:
-                y = center_y
-                self._snap_y = int(center_y)
+            self._snap_guides = []
+            if self._snap_enabled and self._is_highlight_kind(self._drag_kind):
+                x, y = self._snap_highlight_center(self._drag_kind, x, y)
+            else:
+                if self._snap_enabled and abs(x - center_x) <= self.SNAP_THRESHOLD:
+                    x = center_x
+                    self._snap_x = int(center_x)
+                    self._snap_guides.append(("v", int(center_x)))
+                if self._snap_enabled and abs(y - center_y) <= self.SNAP_THRESHOLD:
+                    y = center_y
+                    self._snap_y = int(center_y)
+                    self._snap_guides.append(("h", int(center_y)))
             norm_x = min(max((x - canvas.left()) / max(canvas.width(), 1), 0.0), 1.0)
             norm_y = min(max((y - canvas.top()) / max(canvas.height(), 1), 0.0), 1.0)
             norm_x, norm_y = self._clamp_to_safe_area(self._drag_kind, norm_x, norm_y)
@@ -254,6 +261,7 @@ if QLabel:
             self._drag_kind = None
             self._snap_x = None
             self._snap_y = None
+            self._snap_guides = []
             self.update()
             return super().mouseReleaseEvent(event)
 
@@ -273,12 +281,19 @@ if QLabel:
             self._draw_text_overlay(painter)
             self._draw_highlight_overlay(painter)
             self._draw_sticker_overlay(painter)
-            guide_pen = QPen(QColor(90, 190, 255, 170), 2)
+            guide_pen = QPen(QColor(79, 195, 247, 175), 2)
             painter.setPen(guide_pen)
-            if self._snap_x is not None:
-                painter.drawLine(self._snap_x, 0, self._snap_x, self.height())
-            if self._snap_y is not None:
-                painter.drawLine(0, self._snap_y, self.width(), self._snap_y)
+            guides = self._snap_guides or []
+            if not guides:
+                if self._snap_x is not None:
+                    guides.append(("v", self._snap_x))
+                if self._snap_y is not None:
+                    guides.append(("h", self._snap_y))
+            for axis, value in guides:
+                if axis == "v":
+                    painter.drawLine(value, 0, value, self.height())
+                else:
+                    painter.drawLine(0, value, self.width(), value)
 
         def _draw_watermark_overlay(self, painter: QPainter) -> None:
             data = self._overlays["watermark"]
@@ -454,6 +469,59 @@ if QLabel:
                 f"y={float(data.get('y', 0.5)) + transform.y_offset / max(self._canvas_rect().height(), 1):.3f} "
                 f"scale={transform.scale:.3f} opacity={transform.opacity:.3f} rotation_delta={transform.rotation_delta:.2f}"
             )
+
+
+        @staticmethod
+        def _is_highlight_kind(kind: str) -> bool:
+            return kind == "highlight" or kind.startswith("highlight_")
+
+        def _snap_highlight_center(self, kind: str, center_x: float, center_y: float) -> tuple[float, float]:
+            moving = self._overlay_rect(kind)
+            dx, dy = 0.0, 0.0
+            best_x = self.SNAP_THRESHOLD + 1.0
+            best_y = self.SNAP_THRESHOLD + 1.0
+            moving_x = {
+                "left": center_x - moving.width() / 2,
+                "center": center_x,
+                "right": center_x + moving.width() / 2,
+            }
+            moving_y = {
+                "top": center_y - moving.height() / 2,
+                "center": center_y,
+                "bottom": center_y + moving.height() / 2,
+            }
+            for target_x, target_y in self._highlight_snap_targets(kind):
+                for moving_value in moving_x.values():
+                    for target in target_x:
+                        distance = abs(moving_value - target)
+                        if distance <= self.SNAP_THRESHOLD and distance < best_x:
+                            best_x = distance
+                            dx = target - moving_value
+                            self._snap_x = int(target)
+                for moving_value in moving_y.values():
+                    for target in target_y:
+                        distance = abs(moving_value - target)
+                        if distance <= self.SNAP_THRESHOLD and distance < best_y:
+                            best_y = distance
+                            dy = target - moving_value
+                            self._snap_y = int(target)
+            if self._snap_x is not None:
+                self._snap_guides.append(("v", self._snap_x))
+            if self._snap_y is not None:
+                self._snap_guides.append(("h", self._snap_y))
+            return center_x + dx, center_y + dy
+
+        def _highlight_snap_targets(self, moving_kind: str) -> list[tuple[tuple[float, ...], tuple[float, ...]]]:
+            targets: list[tuple[tuple[float, ...], tuple[float, ...]]] = []
+            for kind, data in self._overlays.items():
+                if kind == moving_kind or kind == "watermark" or not data.get("active"):
+                    continue
+                if self._is_highlight_kind(kind) or kind in {"text", "sticker"}:
+                    rect = self._overlay_rect(kind)
+                    targets.append(((rect.left(), rect.center().x(), rect.right()), (rect.top(), rect.center().y(), rect.bottom())))
+            safe = self._safe_rect("text")
+            targets.append(((safe.center().x(),), (safe.center().y(),)))
+            return targets
 
         def _overlay_visible(self, data: dict) -> bool:
             return bool(data["active"]) and float(data.get("start", 0.0)) <= self._current_time <= float(data.get("end", 0.0))

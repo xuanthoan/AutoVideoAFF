@@ -98,7 +98,6 @@ if QWidget:
             self.highlight_list = QListWidget(); self.highlight_list.setMaximumHeight(64)
             self.add_highlight_button = QPushButton("Add Highlight")
             self.remove_highlight_button = QPushButton("Remove Selected Highlight")
-            self.duplicate_highlight_button = QPushButton("Duplicate Highlight")
             self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(42); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
             self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 160); self.highlight_font_size.setValue(64)
             self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
@@ -112,8 +111,8 @@ if QWidget:
 
             self.export_panel = self._styled_group("Export", "panel-export")
             self.export_layout = QHBoxLayout(self.export_panel)
-            self.export_layout.setContentsMargins(8, 10, 8, 8)
-            self.export_layout.setSpacing(8)
+            self.export_layout.setContentsMargins(6, 8, 6, 6)
+            self.export_layout.setSpacing(6)
 
             sticker_button = QPushButton("Choose Sticker")
             image_button = QPushButton("Choose Images")
@@ -123,11 +122,11 @@ if QWidget:
             self._apply_responsive_control_widths()
 
             root = QGridLayout(self)
-            root.setContentsMargins(4, 4, 4, 4)
-            root.setHorizontalSpacing(8)
-            root.setVerticalSpacing(8)
-            left_column = QVBoxLayout(); left_column.setSpacing(8); left_column.setContentsMargins(0, 0, 0, 0)
-            right_column = QVBoxLayout(); right_column.setSpacing(8); right_column.setContentsMargins(0, 0, 0, 0)
+            root.setContentsMargins(2, 2, 2, 2)
+            root.setHorizontalSpacing(6)
+            root.setVerticalSpacing(6)
+            left_column = QVBoxLayout(); left_column.setSpacing(6); left_column.setContentsMargins(0, 0, 0, 0)
+            right_column = QVBoxLayout(); right_column.setSpacing(6); right_column.setContentsMargins(0, 0, 0, 0)
 
             self.pipeline_panel = self._pipeline_group()
             self.shuffle_panel = self._scene_group()
@@ -146,8 +145,8 @@ if QWidget:
             root.addLayout(left_column, 0, 0)
             root.addLayout(right_column, 0, 1)
             root.addWidget(self.export_panel, 1, 0, 1, 2)
-            root.setColumnStretch(0, 1)
-            root.setColumnStretch(1, 1)
+            root.setColumnStretch(0, 52)
+            root.setColumnStretch(1, 48)
             root.setRowStretch(0, 1)
             root.setRowStretch(1, 0)
 
@@ -157,8 +156,9 @@ if QWidget:
 
         def set_export_controls(self, render_button: QPushButton, stop_button: QPushButton, open_output_button: QPushButton) -> None:
             for button in (render_button, stop_button, open_output_button):
-                button.setMinimumHeight(32)
-                button.setMaximumHeight(36)
+                button.setMinimumHeight(30)
+                button.setMaximumHeight(34)
+                button.setMinimumWidth(0)
                 button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 self.export_layout.addWidget(button, 1)
 
@@ -231,10 +231,10 @@ if QWidget:
 
         def _compact_form(self, group: QGroupBox) -> QFormLayout:
             form = QFormLayout(group)
-            form.setContentsMargins(6, 8, 6, 6)
-            form.setSpacing(5)
-            form.setHorizontalSpacing(6)
-            form.setVerticalSpacing(4)
+            form.setContentsMargins(5, 7, 5, 5)
+            form.setSpacing(4)
+            form.setHorizontalSpacing(5)
+            form.setVerticalSpacing(3)
             form.setLabelAlignment(Qt.AlignLeft)
             form.setFormAlignment(Qt.AlignTop)
             form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -332,7 +332,6 @@ if QWidget:
             form = self._compact_form(group)
             form.addRow("Highlights", self.highlight_list)
             form.addRow(self.add_highlight_button)
-            form.addRow(self.duplicate_highlight_button)
             form.addRow(self.remove_highlight_button)
             form.addRow("Highlight Text", self.highlight_text)
             form.addRow("Highlight Font Size", self.highlight_font_size)
@@ -372,31 +371,34 @@ if QWidget:
             for widget in (
                 self.image_list, self.watermark_text, self.watermark_font, self.watermark_color, self.watermark_density,
                 self.text, self.template, self.motion, self.highlight_list, self.highlight_text, self.highlight_style, self.highlight_animation,
-                self.add_highlight_button, self.remove_highlight_button, self.duplicate_highlight_button, self.sticker_motion, self.export_panel,
+                self.add_highlight_button, self.remove_highlight_button, self.sticker_motion, self.export_panel,
             ):
                 widget.setMinimumWidth(0)
                 widget.setMaximumWidth(16777215)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            for combo in (
+                self.watermark_font, self.watermark_color, self.watermark_density, self.template, self.motion,
+                self.text_motion_speed, self.highlight_style, self.highlight_animation, self.sticker_motion, self.sticker_motion_speed,
+            ):
+                combo.setMinimumContentsLength(8)
+                combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
             for widget in (self.text, self.highlight_text, self.watermark_text):
                 widget.setLineWrapMode(QTextEdit.WidgetWidth)
 
         def _apply_compact_widget_style(self) -> None:
             self.setStyleSheet(
                 """
-                QWidget { font-size: 11px; }
-                QGroupBox { color: #f0f0f0; font-weight: 700; letter-spacing: 0.8px; margin-top: 8px; padding-top: 6px; border: 1px solid #343a40; border-radius: 5px; background: #181b1f; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; }
-                QGroupBox#panel-pipeline { background: #17202a; border-color: #2d3b4a; }
-                QGroupBox#panel-shuffle { background: #1b1b1b; border-color: #373737; }
-                QGroupBox#panel-image { background: #17231d; border-color: #2c4538; }
-                QGroupBox#panel-watermark { background: #171d24; border-color: #304050; }
-                QGroupBox#panel-text { background: #201a27; border-color: #3f344b; }
-                QGroupBox#panel-highlight { background: #252014; border-color: #4a3e25; }
-                QGroupBox#panel-sticker { background: #142321; border-color: #294845; }
-                QGroupBox#panel-export { background: #1b1b1d; border-color: #383a3d; }
-                QPushButton, QComboBox, QSpinBox, QDoubleSpinBox { min-height: 28px; max-height: 32px; }
-                QTextEdit, QListWidget { border: 1px solid #333; border-radius: 3px; }
-                QCheckBox, QRadioButton { min-height: 22px; }
+                QWidget { font-size: 11px; color: #1F2937; background: #F4F5F7; }
+                QGroupBox { color: #1F2937; font-weight: 700; letter-spacing: 0.7px; margin-top: 7px; padding-top: 6px; border: 1px solid #D9DCE3; border-radius: 7px; background: #FFFFFF; }
+                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; background: #FFFFFF; color: #1F2937; }
+                QGroupBox#panel-pipeline, QGroupBox#panel-shuffle, QGroupBox#panel-image, QGroupBox#panel-watermark, QGroupBox#panel-text, QGroupBox#panel-highlight, QGroupBox#panel-sticker, QGroupBox#panel-export { background: #FFFFFF; border-color: #D9DCE3; }
+                QPushButton { min-height: 28px; max-height: 32px; padding: 3px 7px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; color: #1F2937; }
+                QPushButton:hover { background: #EEF4FF; border-color: #93C5FD; }
+                QPushButton:pressed, QPushButton:checked { background: #DBEAFE; border-color: #3B82F6; color: #1D4ED8; }
+                QComboBox, QSpinBox, QDoubleSpinBox { min-height: 26px; max-height: 30px; padding: 1px 5px; border: 1px solid #D9DCE3; border-radius: 5px; background: #FFFFFF; color: #1F2937; }
+                QTextEdit, QListWidget { border: 1px solid #D9DCE3; border-radius: 5px; background: #FAFAFB; color: #1F2937; }
+                QCheckBox, QRadioButton { min-height: 21px; color: #1F2937; spacing: 5px; }
+                QLabel { color: #5B6472; }
                 """
             )
 else:

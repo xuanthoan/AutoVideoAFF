@@ -227,7 +227,7 @@ if QMainWindow:
             self.status = QStatusBar()
             self.setStatusBar(self.status)
             self._wire()
-            root = QWidget(); layout = QHBoxLayout(root)
+            root = QWidget(); root.setObjectName("app-root"); layout = QHBoxLayout(root)
             left_splitter = QSplitter(Qt.Vertical)
             left_splitter.setMinimumWidth(220)
             left_splitter.setMaximumWidth(320)
@@ -248,8 +248,8 @@ if QMainWindow:
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(500)
-            right_column.setMaximumWidth(620)
+            right_column.setMinimumWidth(460)
+            right_column.setMaximumWidth(560)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
@@ -264,10 +264,11 @@ if QMainWindow:
 
             layout.setContentsMargins(6, 6, 6, 6)
             layout.setSpacing(8)
-            layout.addWidget(left_splitter, 16)
-            layout.addWidget(center_column, 56)
-            layout.addWidget(right_column, 28)
+            layout.addWidget(left_splitter, 15)
+            layout.addWidget(center_column, 61)
+            layout.addWidget(right_column, 24)
             self.setCentralWidget(root)
+            self.setStyleSheet("QMainWindow, QWidget#app-root { background: #F4F5F7; }")
             self.preview_playback.reset()
             self._clear_preview_runtime_state(clear_canvas=False, log_session=True)
             self.timeline.set_playhead_time(0.0)
@@ -298,7 +299,6 @@ if QMainWindow:
             self.workflow.highlight_list.currentRowChanged.connect(self.select_highlight_row)
             self.workflow.add_highlight_button.clicked.connect(self.add_highlight_layer)
             self.workflow.remove_highlight_button.clicked.connect(self.remove_selected_highlight)
-            self.workflow.duplicate_highlight_button.clicked.connect(self.duplicate_selected_highlight)
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
@@ -328,12 +328,22 @@ if QMainWindow:
         def _panel(self, title: str, widget: QWidget, object_name: str) -> QGroupBox:
             panel = QGroupBox(title.upper())
             panel.setObjectName(object_name)
-            panel.setStyleSheet(
-                "QGroupBox { color:#f0f0f0; font-weight:700; letter-spacing:0.8px; "
-                "margin-top:8px; padding-top:8px; border:1px solid #343a40; "
-                "border-radius:6px; background:#14171a; } "
-                "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; }"
-            )
+            if object_name in {"panel-preview", "panel-timeline"}:
+                panel.setStyleSheet(
+                    "QGroupBox { color:#E5E7EB; font-weight:700; letter-spacing:0.7px; "
+                    "margin-top:8px; padding-top:8px; border:1px solid #2B3038; "
+                    "border-radius:8px; background:#181A1F; } "
+                    "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; "
+                    "background:#181A1F; color:#E5E7EB; }"
+                )
+            else:
+                panel.setStyleSheet(
+                    "QGroupBox { color:#1F2937; font-weight:700; letter-spacing:0.7px; "
+                    "margin-top:8px; padding-top:8px; border:1px solid #D9DCE3; "
+                    "border-radius:8px; background:#FFFFFF; } "
+                    "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; "
+                    "background:#FFFFFF; color:#1F2937; }"
+                )
             layout = QVBoxLayout(panel)
             layout.setContentsMargins(6, 10, 6, 6)
             layout.addWidget(widget)
@@ -518,18 +528,6 @@ if QMainWindow:
             overlay.set_font_size(int(self.workflow.highlight_font_size.value()))
             overlay.set_full_duration(self.video_duration)
             self.state.overlays.highlight_layers.append(overlay)
-            self.selected_highlight_index = len(self.state.overlays.highlight_layers) - 1
-            self._load_selected_highlight_controls()
-            self.update_highlight_preview()
-            self.refresh_timeline()
-
-        def duplicate_selected_highlight(self) -> None:
-            import copy
-
-            clone = copy.deepcopy(self._selected_highlight())
-            clone.x = min(max(clone.x + 0.05, 0.05), 0.95)
-            clone.y = min(max(clone.y + 0.05, 0.05), 0.95)
-            self.state.overlays.highlight_layers.append(clone)
             self.selected_highlight_index = len(self.state.overlays.highlight_layers) - 1
             self._load_selected_highlight_controls()
             self.update_highlight_preview()
