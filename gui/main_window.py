@@ -234,7 +234,7 @@ if QMainWindow:
             left_splitter.addWidget(self._panel("VIDEO LIST", self.queue, "panel-video-list"))
             left_splitter.addWidget(self._panel("LOG", self.log_box, "panel-log"))
             left_splitter.addWidget(self.reset_preview_cache_button)
-            left_splitter.setSizes([640, 220, 40])
+            left_splitter.setSizes([520, 220, 44])
 
             workflow_container = QWidget()
             workflow_layout = QVBoxLayout(workflow_container)
@@ -249,7 +249,7 @@ if QMainWindow:
 
             right_column = QWidget()
             right_column.setMinimumWidth(460)
-            right_column.setMaximumWidth(560)
+            right_column.setMaximumWidth(540)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
@@ -265,8 +265,8 @@ if QMainWindow:
             layout.setContentsMargins(6, 6, 6, 6)
             layout.setSpacing(8)
             layout.addWidget(left_splitter, 15)
-            layout.addWidget(center_column, 61)
-            layout.addWidget(right_column, 24)
+            layout.addWidget(center_column, 62)
+            layout.addWidget(right_column, 23)
             self.setCentralWidget(root)
             self.setStyleSheet("QMainWindow, QWidget#app-root { background: #F4F5F7; }")
             self.preview_playback.reset()
