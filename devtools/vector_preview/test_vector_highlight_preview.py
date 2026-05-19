@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -48,6 +49,7 @@ class VectorSandbox(QMainWindow):
         self.font_size = QSpinBox(); self.font_size.setRange(16, 180); self.font_size.setValue(56)
         self.scale_slider = QSlider(Qt.Horizontal); self.scale_slider.setRange(40, 260); self.scale_slider.setValue(100)
         self.debug_toggle = QCheckBox("Show Debug Bounding Boxes")
+        self.black_bg_toggle = QCheckBox("Black Preview Background")
         self.export_button = QPushButton("Export Transparent PNG")
 
         controls = QHBoxLayout()
@@ -56,6 +58,7 @@ class VectorSandbox(QMainWindow):
         controls.addWidget(QLabel("Font")); controls.addWidget(self.font_size)
         controls.addWidget(QLabel("Scale")); controls.addWidget(self.scale_slider)
         controls.addWidget(self.debug_toggle)
+        controls.addWidget(self.black_bg_toggle)
         controls.addWidget(self.export_button)
 
         root = QVBoxLayout()
@@ -73,6 +76,7 @@ class VectorSandbox(QMainWindow):
         self.font_size.valueChanged.connect(self._on_font)
         self.scale_slider.valueChanged.connect(self._on_scale)
         self.debug_toggle.toggled.connect(self._on_debug)
+        self.black_bg_toggle.toggled.connect(self._on_preview_bg_toggle)
         self.export_button.clicked.connect(self._export_png)
 
         self.timer = QTimer(self)
@@ -113,6 +117,10 @@ class VectorSandbox(QMainWindow):
     def _on_debug(self, enabled: bool) -> None:
         if self.current_item:
             self.current_item.set_debug_boxes(enabled)
+
+
+    def _on_preview_bg_toggle(self, enabled: bool) -> None:
+        self.view.setBackgroundBrush(QColor("#111111") if enabled else Qt.white)
 
     def _tick(self) -> None:
         if isinstance(self.current_item, OrangeQuoteVectorHighlight):
