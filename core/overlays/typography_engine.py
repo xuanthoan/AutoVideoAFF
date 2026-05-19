@@ -13,9 +13,9 @@ from utils.ffmpeg_helper import app_root
 
 try:
     from PySide6.QtCore import QRectF, Qt
-    from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QImage, QPainter
+    from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QImage, QPainter, QPainterPath, QPen
 except ImportError:  # allows non-GUI CI imports when PySide6 is absent
-    QRectF = Qt = QColor = QFont = QFontDatabase = QGuiApplication = QImage = QPainter = None
+    QRectF = Qt = QColor = QFont = QFontDatabase = QGuiApplication = QImage = QPainter = QPainterPath = QPen = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,20 +82,111 @@ class SocialTypographyRenderer:
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.TextAntialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
         box = QRectF(shadow_pad, shadow_pad, box_width, box_height)
-        radius = scaled_font * self.style.border_radius_ratio
-        painter.setBrush(QColor(template.box_color))
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(box, radius, radius)
-        painter.setFont(font)
-        painter.setPen(QColor(template.font_color))
-        y = box.top() + pad_y
-        for line in lines:
-            line_rect = QRectF(box.left() + pad_x, y, box.width() - pad_x * 2, metrics.height())
-            painter.drawText(line_rect, Qt.AlignHCenter | Qt.AlignVCenter, line)
-            y += metrics.height() + line_spacing
+        if template.name == "Blue Tag Vector":
+            self._draw_blue_tag_vector(painter, box, lines, font, metrics, pad_x, pad_y, line_spacing)
+        elif template.name == "Orange Quote Vector":
+            self._draw_orange_quote_vector(painter, box, lines, font, metrics, pad_x, pad_y, line_spacing)
+        else:
+            radius = scaled_font * self.style.border_radius_ratio
+            painter.setBrush(QColor(template.box_color))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(box, radius, radius)
+            painter.setFont(font)
+            painter.setPen(QColor(template.font_color))
+            y = box.top() + pad_y
+            for line in lines:
+                line_rect = QRectF(box.left() + pad_x, y, box.width() - pad_x * 2, metrics.height())
+                painter.drawText(line_rect, Qt.AlignHCenter | Qt.AlignVCenter, line)
+                y += metrics.height() + line_spacing
         painter.end()
         return image
+
+
+    def _draw_blue_tag_vector(self, painter, box: QRectF, lines: list[str], font, metrics, pad_x: int, pad_y: int, line_spacing: int) -> None:
+        outer = QPainterPath()
+        cut = min(box.width() * 0.11, box.height() * 0.35)
+        outer.moveTo(box.left() + cut, box.top())
+        outer.lineTo(box.right() - 10, box.top())
+        outer.lineTo(box.right(), box.top() + 10)
+        outer.lineTo(box.right(), box.bottom())
+        outer.lineTo(box.left() + 8, box.bottom())
+        outer.lineTo(box.left(), box.bottom() - 8)
+        outer.lineTo(box.left(), box.top() + cut)
+        outer.closeSubpath()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#FFFFFF"))
+        painter.drawPath(outer)
+
+        mid = box.adjusted(8, 8, -8, -8)
+        painter.setBrush(QColor("#F2542D"))
+        painter.drawPath(self._tag_path(mid, cut * 0.75))
+
+        core = mid.adjusted(10, 10, -16, -14)
+        painter.setBrush(QColor("#173F7A"))
+        painter.drawPath(self._tag_path(core, cut * 0.55))
+
+        accent = core.adjusted(0, core.height() - max(8, core.height() * 0.14), 0, 6)
+        painter.setBrush(QColor("#FACC15"))
+        painter.drawRect(accent)
+
+        painter.setFont(font)
+        painter.setPen(QColor("#FFFFFF"))
+        y = core.top() + pad_y * 0.6
+        for line in lines:
+            line_rect = QRectF(core.left() + pad_x * 0.5, y, core.width() - pad_x, metrics.height())
+            painter.drawText(line_rect, Qt.AlignHCenter | Qt.AlignVCenter, line)
+            y += metrics.height() + line_spacing
+
+    def _tag_path(self, rect: QRectF, cut: float):
+        path = QPainterPath()
+        path.moveTo(rect.left() + cut, rect.top())
+        path.lineTo(rect.right(), rect.top())
+        path.lineTo(rect.right(), rect.bottom())
+        path.lineTo(rect.left() + 4, rect.bottom())
+        path.lineTo(rect.left(), rect.bottom() - 4)
+        path.lineTo(rect.left(), rect.top() + cut)
+        path.closeSubpath()
+        return path
+
+    def _draw_orange_quote_vector(self, painter, box: QRectF, lines: list[str], font, metrics, pad_x: int, pad_y: int, line_spacing: int) -> None:
+        outer = box.adjusted(2, 2, -2, -2)
+        painter.setPen(QPen(QColor("#FFFFFF"), 8))
+        painter.setBrush(QColor("#F2542D"))
+        painter.drawRoundedRect(outer, 6, 6)
+
+        painter.setPen(QPen(QColor("#1E3A8A"), 5))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(outer.adjusted(8, 8, -8, -8), 4, 4)
+
+        painter.setFont(font)
+        painter.setPen(QColor("#FFFFFF"))
+        y = outer.top() + pad_y + 18
+        for line in lines:
+            line_rect = QRectF(outer.left() + pad_x, y, outer.width() - pad_x * 2, metrics.height())
+            painter.drawText(line_rect, Qt.AlignHCenter | Qt.AlignVCenter, line)
+            y += metrics.height() + line_spacing
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#FACC15"))
+        quote_w = max(14, metrics.height() * 0.45)
+        painter.drawRoundedRect(QRectF(outer.left() + 18, outer.top() + 12, quote_w, quote_w * 1.3), 2, 2)
+        painter.drawRoundedRect(QRectF(outer.left() + 18 + quote_w * 0.85, outer.top() + 12, quote_w, quote_w * 1.3), 2, 2)
+        painter.drawRoundedRect(QRectF(outer.right() - 18 - quote_w * 1.85, outer.bottom() - 12 - quote_w * 1.3, quote_w, quote_w * 1.3), 2, 2)
+        painter.drawRoundedRect(QRectF(outer.right() - 18 - quote_w, outer.bottom() - 12 - quote_w * 1.3, quote_w, quote_w * 1.3), 2, 2)
+
+        cx, cy = outer.right() - 24, outer.top() + 8
+        r = max(16, metrics.height() * 0.9)
+        painter.setBrush(QColor("#1E3A8A"))
+        painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        painter.setBrush(QColor("#FFFFFF"))
+        tri = QPainterPath()
+        tri.moveTo(cx - r * 0.25, cy - r * 0.35)
+        tri.lineTo(cx - r * 0.25, cy + r * 0.35)
+        tri.lineTo(cx + r * 0.40, cy)
+        tri.closeSubpath()
+        painter.drawPath(tri)
 
     def render_png(self, path: Path, text: str, template: TextTemplate, font_size: float, canvas_width: int, canvas_height: int) -> Path:
         """Write only the typography region PNG; FFmpeg positions it on the final canvas."""
