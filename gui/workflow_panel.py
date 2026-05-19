@@ -61,8 +61,21 @@ if QWidget:
             self.template_manager = TemplateManager()
             self.pipeline_group = QButtonGroup(self)
             self.pipeline_buttons: dict[WorkflowMode, QRadioButton] = {}
+            pipeline_titles = {
+                WorkflowMode.PIPELINE_1: "PIPELINE 1",
+                WorkflowMode.PIPELINE_2: "PIPELINE 2",
+                WorkflowMode.PIPELINE_3: "PIPELINE 3",
+                WorkflowMode.PIPELINE_4: "PIPELINE 4",
+            }
+            pipeline_tooltips = {
+                WorkflowMode.PIPELINE_1: "Shuffle + Image",
+                WorkflowMode.PIPELINE_2: "Shuffle + Image + Overlay",
+                WorkflowMode.PIPELINE_3: "Shuffle + Overlay",
+                WorkflowMode.PIPELINE_4: "Overlay Only",
+            }
             for mode in WorkflowMode:
-                button = QRadioButton(mode.value)
+                button = QRadioButton(pipeline_titles.get(mode, mode.value))
+                button.setToolTip(pipeline_tooltips.get(mode, mode.value))
                 button.setMinimumHeight(24)
                 self.pipeline_buttons[mode] = button
                 self.pipeline_group.addButton(button)
@@ -145,8 +158,8 @@ if QWidget:
             root.addLayout(left_column, 0, 0)
             root.addLayout(right_column, 0, 1)
             root.addWidget(self.export_panel, 1, 0, 1, 2)
-            root.setColumnStretch(0, 52)
-            root.setColumnStretch(1, 48)
+            root.setColumnStretch(0, 44)
+            root.setColumnStretch(1, 56)
             root.setRowStretch(0, 1)
             root.setRowStretch(1, 0)
 
@@ -380,7 +393,7 @@ if QWidget:
                 self.watermark_font, self.watermark_color, self.watermark_density, self.template, self.motion,
                 self.text_motion_speed, self.highlight_style, self.highlight_animation, self.sticker_motion, self.sticker_motion_speed,
             ):
-                combo.setMinimumContentsLength(8)
+                combo.setMinimumContentsLength(6)
                 combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
             for widget in (self.text, self.highlight_text, self.watermark_text):
                 widget.setLineWrapMode(QTextEdit.WidgetWidth)
