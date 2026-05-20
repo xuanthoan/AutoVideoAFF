@@ -57,7 +57,7 @@ if QWidget:
             self.setMinimumHeight(188)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
             self.setMouseTracking(True)
-            self.setStyleSheet("background:#151515;border:1px solid #303030;border-radius:6px;")
+            self.setStyleSheet("background:#FAFBFC;border:1px solid #E1E5EA;border-radius:8px;")
             self.items: list[TimelineOverlayItem] = []
             self.segments: list[SegmentTimelineItem] = []
             self.video_duration = 6.0
@@ -105,7 +105,7 @@ if QWidget:
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
             area = self._track_area_width()
-            painter.setPen(QColor("#737373"))
+            painter.setPen(QColor("#6B7280"))
             painter.drawText(8, 17, "SEGMENTS")
             self._draw_segments(painter)
             first_row = max(0, int((event.rect().top() - 25) // (self.TRACK_HEIGHT + self.TRACK_GAP)))
@@ -113,21 +113,21 @@ if QWidget:
             for idx in range(first_row, last_row):
                 item = self.items[idx]
                 y = self._row_y(idx)
-                painter.setPen(QColor("#a8a8a8" if item.visible else "#666"))
+                painter.setPen(QColor("#374151" if item.visible else "#9CA3AF"))
                 painter.drawText(8, int(y + 18), item.label)
                 painter.setBrush(Qt.NoBrush)
-                painter.setPen(QPen(QColor("#2a2a2a"), 1))
+                painter.setPen(QPen(QColor("#D1D5DB"), 1))
                 painter.drawRoundedRect(QRectF(self.LEFT_GUTTER, y, area, self.TRACK_HEIGHT), 4, 4)
                 rect = self._item_rect(item, idx)
-                color = QColor("#f28c28") if item.kind == "text" else QColor("#2f8cff")
+                color = QColor("#F59E0B") if item.kind == "text" else QColor("#2563EB")
                 color.setAlpha(225 if item.visible else 90)
                 painter.setBrush(color)
-                painter.setPen(QPen(QColor("#ffe3b6") if item.key == self.selected_key else QColor("#111"), 2))
+                painter.setPen(QPen(QColor("#1D4ED8") if item.key == self.selected_key else QColor("#94A3B8"), 2))
                 painter.drawRoundedRect(rect, 5, 5)
-                painter.setPen(QColor("#101010"))
+                painter.setPen(QColor("#F8FAFC"))
                 painter.drawText(rect.adjusted(8, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, f"{item.duration:.2f}s")
             x = self._time_to_x(self.playhead_time)
-            painter.setPen(QPen(QColor("#ffffff"), 2))
+            painter.setPen(QPen(QColor("#2563EB"), 2))
             painter.drawLine(int(x), 0, int(x), self.height())
 
         def wheelEvent(self, event):
@@ -144,12 +144,12 @@ if QWidget:
                 start_x = self._time_to_x(segment.start)
                 end_x = self._time_to_x(segment.end)
                 rect = QRectF(start_x, y, max(4, end_x - start_x), h)
-                color = QColor("#4cc46b" if segment.source == "auto" else "#d8a13c")
+                color = QColor("#22C55E" if segment.source == "auto" else "#F59E0B")
                 color.setAlpha(210 if segment.enabled else 70)
                 painter.setBrush(color)
-                painter.setPen(QPen(QColor("#f6f6f6") if segment.locked else QColor("#202020"), 1))
+                painter.setPen(QPen(QColor("#FFFFFF") if segment.locked else QColor("#E5E7EB"), 1))
                 painter.drawRoundedRect(rect, 3, 3)
-                painter.setPen(QColor("#101010"))
+                painter.setPen(QColor("#F8FAFC"))
                 painter.drawText(rect.adjusted(4, 0, -2, 0), Qt.AlignVCenter | Qt.AlignLeft, segment.source.upper())
 
         def mousePressEvent(self, event):
