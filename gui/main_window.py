@@ -234,12 +234,12 @@ if QMainWindow:
             left_splitter.addWidget(self._panel("VIDEO LIST", self.queue, "panel-video-list"))
             left_splitter.addWidget(self._panel("LOG", self.log_box, "panel-log"))
             left_splitter.addWidget(self.reset_preview_cache_button)
-            left_splitter.setSizes([520, 220, 44])
+            left_splitter.setSizes([560, 320, 52])
 
             workflow_container = QWidget()
             workflow_layout = QVBoxLayout(workflow_container)
-            workflow_layout.setContentsMargins(4, 4, 4, 4)
-            workflow_layout.setSpacing(4)
+            workflow_layout.setContentsMargins(0, 0, 0, 0)
+            workflow_layout.setSpacing(10)
             workflow_layout.addWidget(self.workflow)
             workflow_layout.addStretch()
             right_scroll = QScrollArea()
@@ -248,8 +248,8 @@ if QMainWindow:
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(460)
-            right_column.setMaximumWidth(540)
+            right_column.setMinimumWidth(520)
+            right_column.setMaximumWidth(700)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
@@ -258,17 +258,17 @@ if QMainWindow:
             center_column = QWidget()
             center_layout = QVBoxLayout(center_column)
             center_layout.setContentsMargins(0, 0, 0, 0)
-            center_layout.setSpacing(6)
+            center_layout.setSpacing(10)
             center_layout.addWidget(self._panel("PREVIEW", self.preview, "panel-preview"), 64)
             center_layout.addWidget(self._panel("TIMELINE", self.timeline, "panel-timeline"), 36)
 
-            layout.setContentsMargins(6, 6, 6, 6)
-            layout.setSpacing(8)
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.setSpacing(10)
             layout.addWidget(left_splitter, 15)
-            layout.addWidget(center_column, 62)
-            layout.addWidget(right_column, 23)
+            layout.addWidget(center_column, 52)
+            layout.addWidget(right_column, 33)
             self.setCentralWidget(root)
-            self.setStyleSheet("QMainWindow, QWidget#app-root { background: #F4F5F7; }")
+            self.setStyleSheet("QMainWindow, QWidget#app-root { background: #F5F7FA; }")
             self.preview_playback.reset()
             self._clear_preview_runtime_state(clear_canvas=False, log_session=True)
             self.timeline.set_playhead_time(0.0)
@@ -328,24 +328,15 @@ if QMainWindow:
         def _panel(self, title: str, widget: QWidget, object_name: str) -> QGroupBox:
             panel = QGroupBox(title.upper())
             panel.setObjectName(object_name)
-            if object_name in {"panel-preview", "panel-timeline"}:
-                panel.setStyleSheet(
-                    "QGroupBox { color:#E5E7EB; font-weight:700; letter-spacing:0.7px; "
-                    "margin-top:8px; padding-top:8px; border:1px solid #2B3038; "
-                    "border-radius:8px; background:#181A1F; } "
-                    "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; "
-                    "background:#181A1F; color:#E5E7EB; }"
-                )
-            else:
-                panel.setStyleSheet(
-                    "QGroupBox { color:#1F2937; font-weight:700; letter-spacing:0.7px; "
-                    "margin-top:8px; padding-top:8px; border:1px solid #D9DCE3; "
-                    "border-radius:8px; background:#FFFFFF; } "
-                    "QGroupBox::title { subcontrol-origin: margin; left:10px; padding:0 5px; "
-                    "background:#FFFFFF; color:#1F2937; }"
-                )
+            panel.setStyleSheet(
+                "QGroupBox { color:#1F2937; font-weight:700; letter-spacing:0.8px; "
+                "margin-top:10px; padding-top:10px; border:1px solid #E1E5EA; "
+                "border-radius:12px; background:#FFFFFF; } "
+                "QGroupBox::title { subcontrol-origin: margin; left:12px; padding:0 4px; "
+                "background:#FFFFFF; color:#1F2937; }"
+            )
             layout = QVBoxLayout(panel)
-            layout.setContentsMargins(6, 10, 6, 6)
+            layout.setContentsMargins(10, 12, 10, 10)
             layout.addWidget(widget)
             return panel
 

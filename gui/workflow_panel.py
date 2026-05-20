@@ -124,8 +124,8 @@ if QWidget:
 
             self.export_panel = self._styled_group("Export", "panel-export")
             self.export_layout = QHBoxLayout(self.export_panel)
-            self.export_layout.setContentsMargins(6, 8, 6, 6)
-            self.export_layout.setSpacing(6)
+            self.export_layout.setContentsMargins(10, 10, 10, 10)
+            self.export_layout.setSpacing(10)
 
             sticker_button = QPushButton("Choose Sticker")
             image_button = QPushButton("Choose Images")
@@ -135,11 +135,11 @@ if QWidget:
             self._apply_responsive_control_widths()
 
             root = QGridLayout(self)
-            root.setContentsMargins(2, 2, 2, 2)
-            root.setHorizontalSpacing(6)
-            root.setVerticalSpacing(6)
-            left_column = QVBoxLayout(); left_column.setSpacing(6); left_column.setContentsMargins(0, 0, 0, 0)
-            right_column = QVBoxLayout(); right_column.setSpacing(6); right_column.setContentsMargins(0, 0, 0, 0)
+            root.setContentsMargins(0, 0, 0, 0)
+            root.setHorizontalSpacing(10)
+            root.setVerticalSpacing(10)
+            left_column = QVBoxLayout(); left_column.setSpacing(10); left_column.setContentsMargins(0, 0, 0, 0)
+            right_column = QVBoxLayout(); right_column.setSpacing(10); right_column.setContentsMargins(0, 0, 0, 0)
 
             self.pipeline_panel = self._pipeline_group()
             self.shuffle_panel = self._scene_group()
@@ -158,8 +158,8 @@ if QWidget:
             root.addLayout(left_column, 0, 0)
             root.addLayout(right_column, 0, 1)
             root.addWidget(self.export_panel, 1, 0, 1, 2)
-            root.setColumnStretch(0, 44)
-            root.setColumnStretch(1, 56)
+            root.setColumnStretch(0, 1)
+            root.setColumnStretch(1, 1)
             root.setRowStretch(0, 1)
             root.setRowStretch(1, 0)
 
@@ -169,8 +169,8 @@ if QWidget:
 
         def set_export_controls(self, render_button: QPushButton, stop_button: QPushButton, open_output_button: QPushButton) -> None:
             for button in (render_button, stop_button, open_output_button):
-                button.setMinimumHeight(30)
-                button.setMaximumHeight(34)
+                button.setMinimumHeight(34)
+                button.setMaximumHeight(38)
                 button.setMinimumWidth(0)
                 button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 self.export_layout.addWidget(button, 1)
@@ -244,10 +244,10 @@ if QWidget:
 
         def _compact_form(self, group: QGroupBox) -> QFormLayout:
             form = QFormLayout(group)
-            form.setContentsMargins(5, 7, 5, 5)
-            form.setSpacing(4)
-            form.setHorizontalSpacing(5)
-            form.setVerticalSpacing(3)
+            form.setContentsMargins(10, 10, 10, 10)
+            form.setSpacing(6)
+            form.setHorizontalSpacing(8)
+            form.setVerticalSpacing(7)
             form.setLabelAlignment(Qt.AlignLeft)
             form.setFormAlignment(Qt.AlignTop)
             form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -303,8 +303,8 @@ if QWidget:
             group = self._styled_group("Shuffle", "panel-shuffle")
             form = self._compact_form(group)
             form.addRow("Sensitivity", self.scene_sensitivity)
-            form.addRow("Fallback Minimum", self.fallback_min)
-            form.addRow("Fallback Maximum", self.fallback_max)
+            form.addRow("Fallback Min", self.fallback_min)
+            form.addRow("Fallback Max", self.fallback_max)
             return group
 
         def _image_group(self, button):
@@ -401,17 +401,17 @@ if QWidget:
         def _apply_compact_widget_style(self) -> None:
             self.setStyleSheet(
                 """
-                QWidget { font-size: 11px; color: #1F2937; background: #F4F5F7; }
-                QGroupBox { color: #1F2937; font-weight: 700; letter-spacing: 0.7px; margin-top: 7px; padding-top: 6px; border: 1px solid #D9DCE3; border-radius: 7px; background: #FFFFFF; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; background: #FFFFFF; color: #1F2937; }
-                QGroupBox#panel-pipeline, QGroupBox#panel-shuffle, QGroupBox#panel-image, QGroupBox#panel-watermark, QGroupBox#panel-text, QGroupBox#panel-highlight, QGroupBox#panel-sticker, QGroupBox#panel-export { background: #FFFFFF; border-color: #D9DCE3; }
-                QPushButton { min-height: 28px; max-height: 32px; padding: 3px 7px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; color: #1F2937; }
-                QPushButton:hover { background: #EEF4FF; border-color: #93C5FD; }
+                QWidget { font-size: 12px; color: #1F2937; background: #F5F7FA; }
+                QGroupBox { color: #1F2937; font-weight: 700; letter-spacing: 0.8px; margin-top: 10px; padding-top: 8px; border: 1px solid #E1E5EA; border-radius: 12px; background: #FFFFFF; }
+                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; background: #FFFFFF; color: #1F2937; }
+                QGroupBox#panel-pipeline, QGroupBox#panel-shuffle, QGroupBox#panel-image, QGroupBox#panel-watermark, QGroupBox#panel-text, QGroupBox#panel-highlight, QGroupBox#panel-sticker, QGroupBox#panel-export { background: #FFFFFF; border-color: #E1E5EA; }
+                QPushButton { min-height: 32px; max-height: 36px; padding: 4px 10px; border-radius: 8px; border: 1px solid #D8DEE8; background: #FFFFFF; color: #1F2937; }
+                QPushButton:hover { background: #EFF6FF; border-color: #93C5FD; }
                 QPushButton:pressed, QPushButton:checked { background: #DBEAFE; border-color: #3B82F6; color: #1D4ED8; }
-                QComboBox, QSpinBox, QDoubleSpinBox { min-height: 26px; max-height: 30px; padding: 1px 5px; border: 1px solid #D9DCE3; border-radius: 5px; background: #FFFFFF; color: #1F2937; }
-                QTextEdit, QListWidget { border: 1px solid #D9DCE3; border-radius: 5px; background: #FAFAFB; color: #1F2937; }
-                QCheckBox, QRadioButton { min-height: 21px; color: #1F2937; spacing: 5px; }
-                QLabel { color: #5B6472; }
+                QComboBox, QSpinBox, QDoubleSpinBox { min-height: 30px; max-height: 34px; padding: 2px 8px; border: 1px solid #D8DEE8; border-radius: 7px; background: #FFFFFF; color: #1F2937; }
+                QTextEdit, QListWidget { border: 1px solid #D8DEE8; border-radius: 7px; background: #FAFBFC; color: #1F2937; }
+                QCheckBox, QRadioButton { min-height: 24px; color: #1F2937; spacing: 6px; }
+                QLabel { color: #6B7280; font-weight: 600; }
                 """
             )
 else:
