@@ -135,11 +135,11 @@ if QWidget:
             self._apply_responsive_control_widths()
 
             root = QGridLayout(self)
-            root.setContentsMargins(2, 2, 2, 2)
+            root.setContentsMargins(0, 0, 0, 0)
             root.setHorizontalSpacing(10)
             root.setVerticalSpacing(10)
-            left_column = QVBoxLayout(); left_column.setSpacing(6); left_column.setContentsMargins(0, 0, 0, 0)
-            right_column = QVBoxLayout(); right_column.setSpacing(6); right_column.setContentsMargins(0, 0, 0, 0)
+            left_column = QVBoxLayout(); left_column.setSpacing(8); left_column.setContentsMargins(0, 0, 0, 0)
+            right_column = QVBoxLayout(); right_column.setSpacing(8); right_column.setContentsMargins(0, 0, 0, 0)
 
             self.pipeline_panel = self._pipeline_group()
             self.shuffle_panel = self._scene_group()
@@ -244,8 +244,8 @@ if QWidget:
 
         def _compact_form(self, group: QGroupBox) -> QFormLayout:
             form = QFormLayout(group)
-            form.setContentsMargins(5, 7, 5, 5)
-            form.setSpacing(4)
+            form.setContentsMargins(8, 8, 8, 8)
+            form.setSpacing(6)
             form.setHorizontalSpacing(5)
             form.setVerticalSpacing(3)
             form.setLabelAlignment(Qt.AlignLeft)

@@ -234,7 +234,7 @@ if QMainWindow:
             left_splitter.addWidget(self._panel("VIDEO LIST", self.queue, "panel-video-list"))
             left_splitter.addWidget(self._panel("LOG", self.log_box, "panel-log"))
             left_splitter.addWidget(self.reset_preview_cache_button)
-            left_splitter.setSizes([520, 220, 44])
+            left_splitter.setSizes([560, 260, 44])
 
             workflow_container = QWidget()
             workflow_layout = QVBoxLayout(workflow_container)
@@ -252,13 +252,13 @@ if QMainWindow:
             right_column.setMaximumWidth(660)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
-            right_column_layout.setSpacing(6)
+            right_column_layout.setSpacing(8)
             right_column_layout.addWidget(right_scroll, 1)
 
             center_column = QWidget()
             center_layout = QVBoxLayout(center_column)
             center_layout.setContentsMargins(0, 0, 0, 0)
-            center_layout.setSpacing(6)
+            center_layout.setSpacing(8)
             center_layout.addWidget(self._panel("PREVIEW", self.preview, "panel-preview"), 64)
             center_layout.addWidget(self._panel("TIMELINE", self.timeline, "panel-timeline"), 36)
 

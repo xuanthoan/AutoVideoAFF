@@ -31,8 +31,8 @@ if QWidget:
             remove.clicked.connect(self.remove_selected)
             clear.clicked.connect(self.clear_all)
             layout = QVBoxLayout(self)
-            layout.setContentsMargins(4, 4, 4, 4)
-            layout.setSpacing(5)
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(6)
             self.setStyleSheet("QWidget{background:#FFFFFF;color:#1F2937;} QPushButton { min-height: 29px; max-height: 33px; padding:3px 8px; border-radius:8px; border:1px solid #CBD5E1; background:#FFFFFF; color:#1F2937; } QPushButton:hover{background:#EEF4FF;border-color:#93C5FD;} QListWidget { border:1px solid #E1E5EA; border-radius:8px; background:#FAFBFC; color:#1F2937; }")
             layout.addWidget(self.list, 1)
             for widget in (add_video, add_folder, remove, clear):
