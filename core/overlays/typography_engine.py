@@ -5,17 +5,20 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
 from core.overlays.template_manager import TextTemplate
+from highlight.svg_templates import SVGHighlightItem
 from utils.ffmpeg_helper import app_root
 
 
 try:
-    from PySide6.QtCore import QRectF, Qt
+    from PySide6.QtCore import QByteArray, QRectF, Qt
     from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QImage, QPainter, QPainterPath, QPen
+    from PySide6.QtSvg import QSvgRenderer
 except ImportError:  # allows non-GUI CI imports when PySide6 is absent
-    QRectF = Qt = QColor = QFont = QFontDatabase = QGuiApplication = QImage = QPainter = QPainterPath = QPen = None
+    QByteArray = QRectF = Qt = QColor = QFont = QFontDatabase = QGuiApplication = QImage = QPainter = QPainterPath = QPen = QSvgRenderer = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +87,8 @@ class SocialTypographyRenderer:
         painter.setRenderHint(QPainter.TextAntialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         box = QRectF(shadow_pad, shadow_pad, box_width, box_height)
+        if template.name == "Orange Quote SVG":
+            return self._render_orange_quote_svg(text, scaled_font, canvas_height)
         if template.name == "Blue Tag Vector":
             self._draw_blue_tag_vector(painter, box, lines, font, metrics, pad_x, pad_y, line_spacing)
         elif template.name == "Orange Quote Vector":
@@ -102,6 +107,50 @@ class SocialTypographyRenderer:
                 y += metrics.height() + line_spacing
         painter.end()
         return image
+
+    def _render_orange_quote_svg(self, text: str, scaled_font: int, canvas_height: int):
+        template_path = app_root() / "assets" / "vector_highlight_templates" / "orange_quote_template.svg"
+        item = SVGHighlightItem(template_path=template_path, text=text, font_size=scaled_font, template_id="orange_quote_template")
+        markup = item.svg_markup()
+        root = ET.fromstring(markup)
+        node = root.find(".//*[@id='dynamic_text']")
+        if node is not None:
+            node.set("x", "390")
+            node.set("text-anchor", "middle")
+            node.set("dominant-baseline", "middle")
+            node.set("y", "184")
+            node.set("font-size", f"{float(scaled_font):.2f}")
+            node.text = text or ""
+            try:
+                for _ in range(10):
+                    bbox = self._text_bbox(node.text or "", float(node.get("font-size", scaled_font)))
+                    if bbox <= 620:
+                        break
+                    node.set("font-size", f"{max(24.0, float(node.get('font-size')) * 0.9):.2f}")
+            except Exception:
+                pass
+        updated = ET.tostring(root, encoding="unicode")
+        renderer = QSvgRenderer(QByteArray(updated.encode("utf-8")))
+        size = renderer.defaultSize()
+        scale = max(0.5, canvas_height / 1920)
+        width = max(1, int(size.width() * scale))
+        height = max(1, int(size.height() * scale))
+        image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+        image.fill(Qt.transparent)
+        painter = QPainter(image)
+        renderer.render(painter, QRectF(0, 0, width, height))
+        painter.end()
+        return image
+
+    def _text_bbox(self, text: str, font_size: float) -> int:
+        font = self._font(max(12, int(font_size)))
+        probe = QImage(8, 8, QImage.Format_ARGB32_Premultiplied)
+        probe.fill(Qt.transparent)
+        p = QPainter(probe)
+        p.setFont(font)
+        w = p.fontMetrics().horizontalAdvance(text)
+        p.end()
+        return int(w)
 
 
     def _draw_blue_tag_vector(self, painter, box: QRectF, lines: list[str], font, metrics, pad_x: int, pad_y: int, line_spacing: int) -> None:
