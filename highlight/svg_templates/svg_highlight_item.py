@@ -15,5 +15,4 @@ class SVGHighlightItem:
 
     def svg_markup(self) -> str:
         markup = self.loader.load_markup()
-        self.loader.validate(markup)
         return self.loader.update_dynamic_text(markup, self.text, self.font_size)

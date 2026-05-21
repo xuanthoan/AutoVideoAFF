@@ -111,34 +111,28 @@ class SocialTypographyRenderer:
         return image
 
     def _render_orange_quote_svg(self, text: str, scaled_font: int, canvas_height: int):
-        template_path = app_root() / "assets" / "vector_highlight_templates" / "orange_quote_template_fixed.svg"
-        try:
-            item = SVGHighlightItem(template_path=template_path, text=text, font_size=scaled_font, template_id="orange_quote_template")
-            markup = item.svg_markup()
-            root = ET.fromstring(markup)
-            node = root.find(".//*[@id='dynamic_text']")
-            if node is not None:
-                node.set("x", node.get("x", "390"))
-                node.set("text-anchor", node.get("text-anchor", "middle"))
-                node.set("dominant-baseline", node.get("dominant-baseline", "middle"))
-                node.set("font-size", f"{float(scaled_font):.2f}")
-                try:
-                    for _ in range(10):
-                        bbox = self._text_bbox(node.text or "", float(node.get("font-size", scaled_font)))
-                        if bbox <= 620:
-                            break
-                        node.set("font-size", f"{max(24.0, float(node.get('font-size')) * 0.9):.2f}")
-                except Exception:
-                    pass
-            updated = ET.tostring(root, encoding="unicode")
-            renderer = QSvgRenderer(QByteArray(updated.encode("utf-8")))
-            if not renderer.isValid():
-                raise SVGTemplateError("QSvgRenderer could not parse SVG markup.")
-        except Exception as exc:
-            self._logger.error("Orange Quote SVG render failed: %s", exc)
-            image = QImage(1, 1, QImage.Format_ARGB32_Premultiplied)
-            image.fill(Qt.transparent)
-            return image
+        template_path = app_root() / "assets" / "vector_highlight_templates" / "orange_quote_template.svg"
+        item = SVGHighlightItem(template_path=template_path, text=text, font_size=scaled_font, template_id="orange_quote_template")
+        markup = item.svg_markup()
+        root = ET.fromstring(markup)
+        node = root.find(".//*[@id='dynamic_text']")
+        if node is not None:
+            node.set("x", "390")
+            node.set("text-anchor", "middle")
+            node.set("dominant-baseline", "middle")
+            node.set("y", "184")
+            node.set("font-size", f"{float(scaled_font):.2f}")
+            node.text = text or ""
+            try:
+                for _ in range(10):
+                    bbox = self._text_bbox(node.text or "", float(node.get("font-size", scaled_font)))
+                    if bbox <= 620:
+                        break
+                    node.set("font-size", f"{max(24.0, float(node.get('font-size')) * 0.9):.2f}")
+            except Exception:
+                pass
+        updated = ET.tostring(root, encoding="unicode")
+        renderer = QSvgRenderer(QByteArray(updated.encode("utf-8")))
         size = renderer.defaultSize()
         scale = max(0.5, canvas_height / 1920)
         width = max(1, int(size.width() * scale))
