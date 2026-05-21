@@ -4,12 +4,13 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
 from core.overlays.template_manager import TextTemplate
-from highlight.svg_templates import SVGHighlightItem
+from highlight.svg_templates import SVGHighlightItem, SVGTemplateError
 from utils.ffmpeg_helper import app_root
 
 
@@ -49,6 +50,7 @@ class SocialTypographyRenderer:
     FONT_FAMILIES = ("Montserrat ExtraBold", "Montserrat", "Poppins ExtraBold", "Poppins")
     _fonts_loaded = False
     _owned_app = None
+    _logger = logging.getLogger(__name__)
 
     def __init__(self, style: TypographyStyle | None = None) -> None:
         self.style = style or TypographyStyle()
