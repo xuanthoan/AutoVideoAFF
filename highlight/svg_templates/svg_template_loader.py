@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import xml.etree.ElementTree as ET
-from xml.sax.saxutils import escape
 
 
 class SVGTemplateError(RuntimeError):
@@ -36,7 +35,7 @@ class SVGTemplateLoader:
         dynamic = root.find(".//*[@id='dynamic_text']")
         if dynamic is None:
             raise SVGTemplateError("SVG element id='dynamic_text' not found.")
-        dynamic.text = escape(text or "", {"\"": "&quot;", "'": "&apos;"})
+        dynamic.text = text or ""
         if font_size is not None:
             dynamic.set("font-size", f"{float(font_size):.2f}")
         return ET.tostring(root, encoding="unicode")

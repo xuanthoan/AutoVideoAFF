@@ -90,6 +90,7 @@ class SocialTypographyRenderer:
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         box = QRectF(shadow_pad, shadow_pad, box_width, box_height)
         if template.name == "Orange Quote SVG":
+            painter.end()
             return self._render_orange_quote_svg(text, scaled_font, canvas_height)
         if template.name == "Blue Tag Vector":
             self._draw_blue_tag_vector(painter, box, lines, font, metrics, pad_x, pad_y, line_spacing)
@@ -118,47 +119,26 @@ class SocialTypographyRenderer:
             root = ET.fromstring(markup)
             node = root.find(".//*[@id='dynamic_text']")
             if node is not None:
-                node.set("x", node.get("x", "390"))
-                node.set("text-anchor", node.get("text-anchor", "middle"))
-                node.set("dominant-baseline", node.get("dominant-baseline", "middle"))
                 node.set("font-size", f"{float(scaled_font):.2f}")
-                try:
-                    for _ in range(10):
-                        bbox = self._text_bbox(node.text or "", float(node.get("font-size", scaled_font)))
-                        if bbox <= 620:
-                            break
-                        node.set("font-size", f"{max(24.0, float(node.get('font-size')) * 0.9):.2f}")
-                except Exception:
-                    pass
             updated = ET.tostring(root, encoding="unicode")
             renderer = QSvgRenderer(QByteArray(updated.encode("utf-8")))
             if not renderer.isValid():
                 raise SVGTemplateError("QSvgRenderer could not parse SVG markup.")
+            size = renderer.defaultSize()
+            scale = max(0.5, canvas_height / 1920)
+            width = max(1, int(size.width() * scale))
+            height = max(1, int(size.height() * scale))
+            image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+            image.fill(Qt.transparent)
+            painter = QPainter(image)
+            renderer.render(painter, QRectF(0, 0, width, height))
+            painter.end()
+            return image
         except Exception as exc:
             self._logger.error("Orange Quote SVG render failed: %s", exc)
             image = QImage(1, 1, QImage.Format_ARGB32_Premultiplied)
             image.fill(Qt.transparent)
             return image
-        size = renderer.defaultSize()
-        scale = max(0.5, canvas_height / 1920)
-        width = max(1, int(size.width() * scale))
-        height = max(1, int(size.height() * scale))
-        image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
-        image.fill(Qt.transparent)
-        painter = QPainter(image)
-        renderer.render(painter, QRectF(0, 0, width, height))
-        painter.end()
-        return image
-
-    def _text_bbox(self, text: str, font_size: float) -> int:
-        font = self._font(max(12, int(font_size)))
-        probe = QImage(8, 8, QImage.Format_ARGB32_Premultiplied)
-        probe.fill(Qt.transparent)
-        p = QPainter(probe)
-        p.setFont(font)
-        w = p.fontMetrics().horizontalAdvance(text)
-        p.end()
-        return int(w)
 
 
     def _draw_blue_tag_vector(self, painter, box: QRectF, lines: list[str], font, metrics, pad_x: int, pad_y: int, line_spacing: int) -> None:
