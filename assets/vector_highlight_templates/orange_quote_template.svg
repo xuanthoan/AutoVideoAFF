@@ -1,0 +1,20 @@
+<svg id="orange_quote_template" xmlns="http://www.w3.org/2000/svg" width="780" height="340" viewBox="0 0 780 340" fill="none">
+  <g id="sticker_root">
+    <rect id="sticker_body" x="8" y="8" width="764" height="324" rx="26" fill="#F2542D" stroke="#FFFFFF" stroke-width="12"/>
+    <rect id="navy_frame" x="40" y="40" width="700" height="260" rx="18" stroke="#1E3A8A" stroke-width="10"/>
+    <g id="quote_top" fill="#FACC15">
+      <rect x="64" y="60" width="28" height="40" rx="6"/>
+      <rect x="98" y="60" width="28" height="40" rx="6"/>
+    </g>
+    <g id="quote_bottom" fill="#FACC15">
+      <rect x="652" y="240" width="28" height="40" rx="6"/>
+      <rect x="686" y="240" width="28" height="40" rx="6"/>
+    </g>
+    <g id="play_button">
+      <circle id="play_circle" cx="694" cy="78" r="34" fill="#1E3A8A"/>
+      <path id="play_triangle" d="M684 60 L684 96 L713 78 Z" fill="#FFFFFF"/>
+      <text id="play_text" x="694" y="128" text-anchor="middle" fill="#FFFFFF" font-size="16" font-family="Montserrat, Poppins, Arial" font-weight="700">PLAY</text>
+    </g>
+    <text id="dynamic_text" x="390" y="184" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="120" font-family="Montserrat, Poppins, Arial" font-weight="800">SALE</text>
+  </g>
+</svg>

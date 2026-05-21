@@ -11,7 +11,7 @@ HIGHLIGHT_STYLE_NAMES = [
     "TikTok Shop", "Modern Minimal", "Bubble Cute", "Strong Black Yellow", "Hot Deal Red", "Luxury Gold",
     "Clean White", "Black Friday", "Summer Sale", "Mega Discount", "Viral Trend", "Elegant Beauty",
     "Cosmetic Pink", "Kitchen Home", "Food Delivery", "Gaming Neon", "Fashion Streetwear", "Minimal Premium",
-    "Blue Tag Vector", "Orange Quote Vector", "Random Style",
+    "Blue Tag Vector", "Orange Quote Vector", "Orange Quote SVG", "Random Style",
 ]
 
 HIGHLIGHT_ANIMATIONS = [
@@ -75,6 +75,7 @@ class HighlightStyleManager:
 
         TextTemplate("Blue Tag Vector", "#FFFFFF", "#1E3A8A", "#F59E0B", "black@0.20", ("#FFFFFF", "#1E3A8A")),
         TextTemplate("Orange Quote Vector", "#FFFFFF", "#F2542D", "#1E3A8A", "black@0.20", ("#FFFFFF", "#F2542D")),
+        TextTemplate("Orange Quote SVG", "#FFFFFF", "#F2542D", "#1E3A8A", "black@0.20", ("#FFFFFF", "#F2542D")),
     ]
 
     def names(self) -> list[str]:
