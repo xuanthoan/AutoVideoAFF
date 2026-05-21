@@ -1,0 +1,38 @@
+<svg width="769" height="618" viewBox="0 0 769 618" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="orange_quote_template">
+<g id="sticker_root">
+<g id="sticker_body">
+<circle id="play_button_outer_border" cx="588" cy="144" r="114.5" fill="#123368" stroke="white" stroke-width="17"/>
+<rect id="back_navy_shadow" x="24.5" y="152.5" width="736" height="346" fill="#153369" stroke="white" stroke-width="17"/>
+<rect id="orange_body_outer" x="8.5" y="115.5" width="714" height="350" fill="#EE4E2E" stroke="white" stroke-width="17"/>
+<rect id="orange_body_inner_frame" x="41.5" y="169.5" width="681" height="311" fill="#EE4E2E" stroke="#123368" stroke-width="17"/>
+</g>
+<g id="navy_frame">
+<rect id="frame_right_white" x="714" y="178" width="18" height="294" fill="white"/>
+<rect id="frame_bottom_white" x="50" y="472" width="15" height="664" transform="rotate(-90 50 472)" fill="white"/>
+<rect id="frame_top_orange_gap" x="59" y="161" width="157" height="17" fill="#EE4E2E"/>
+<rect id="frame_bottom_right_white" x="554" y="472" width="154" height="18" fill="white"/>
+</g>
+<g id="quote_top">
+<g id="quote_top_blocks">
+<rect id="quote_top_block_left" x="66" y="156" width="65" height="58" fill="#FFBB01"/>
+<rect id="quote_top_block_right" x="138" y="156" width="65" height="58" fill="#FFBB01"/>
+</g>
+<text id="quote_top_glyph" fill="#FFBB01" stroke="white" style="white-space: pre" stroke-width="10" xml:space="preserve" font-family="Archivo" font-size="460" letter-spacing="0em"><tspan x="45" y="403.64">“</tspan></text>
+</g>
+<g id="quote_bottom">
+<text id="quote_bottom_glyph" transform="matrix(-1 0 0 -1 720 618)" fill="#FFBB01" stroke="white" style="white-space: pre" stroke-width="10" xml:space="preserve" font-family="Archivo" font-size="460" letter-spacing="0em"><tspan x="0" y="403.64">“</tspan></text>
+<g id="quote_bottom_blocks">
+<rect id="quote_bottom_block_left" x="562" y="404" width="65" height="58" fill="#FFBB01"/>
+<rect id="quote_bottom_block_right" x="634" y="404" width="65" height="58" fill="#FFBB01"/>
+</g>
+</g>
+<g id="play_button">
+<circle id="play_circle" cx="588" cy="144" r="106" fill="#123368"/>
+<path id="play_triangle" d="M540.75 95.1676C540.75 79.7716 557.417 70.1491 570.75 77.8471L655.5 126.778C668.833 134.476 668.833 153.721 655.5 161.419L570.75 210.349C557.417 218.047 540.75 208.425 540.75 193.028L540.75 95.1676Z" fill="#FFFBFB"/>
+<text id="play_text" transform="translate(572 40)" fill="#123368" style="white-space: pre" xml:space="preserve" font-family="Arya" font-size="100" letter-spacing="0em"><tspan x="0" y="126.55">S</tspan></text>
+</g>
+<text id="dynamic_text" fill="white" style="white-space: pre" xml:space="preserve" font-family="Archivo Black" font-size="150" letter-spacing="0em"><tspan x="93" y="389.6">SALE</tspan></text>
+</g>
+</g>
+</svg>
